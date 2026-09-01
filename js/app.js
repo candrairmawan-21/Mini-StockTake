@@ -3,7 +3,7 @@
  */
 const Config = {
     // URL Google Apps Script Web App (Isi setelah deploy backend)
-    GOOGLE_SCRIPT_URL: "https://script.google.com/macros/s/AKfycby.../exec", 
+    GOOGLE_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbwBnHSNiuboFv2KujFfqHBfxWvk3xJpkuAqqNnu4zSLDiEMu-YDSBSG5ERakchme9Tr/exec", 
     
     UserMapping: {
         "XGSS": "JC2017", "XBDS": "JC8001", "XWGN": "JC2021", "XPRC": "JC1029",
