@@ -1,57 +1,64 @@
-/* Gaya UI Klasik ala Windows XP / VB6 dengan Font Diperbesar */
-body { font-family: 'Tahoma', 'MS Sans Serif', sans-serif; background-color: #d4d0c8; color: #000; margin: 0; padding: 0; font-size: 13px; overflow-x: hidden; }
+body { font-family: 'Tahoma', 'Segoe UI', sans-serif; background-color: #d4d0c8; color: #000; margin: 0; padding: 0; font-size: 13px; overflow-x: hidden; }
 .hidden { display: none !important; }
-input, select, button, textarea { font-family: 'Tahoma', 'MS Sans Serif', sans-serif; font-size: 13px; }
+input, select, button, textarea { font-family: 'Tahoma', 'Segoe UI', sans-serif; font-size: 13px; }
 
-/* Modal Login */
-#loginSection { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #d4d0c8; border: 2px outset #fff; padding: 2px; width: 320px; z-index: 1000; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); }
-.window-header { background: #0000aa; color: white; padding: 4px 6px; font-weight: bold; display: flex; justify-content: space-between; font-size: 14px; }
-.window-body { padding: 18px; border: 2px inset #fff; margin-top: 2px; background: #d4d0c8; }
-.btn-classic { background: #d4d0c8; border: 2px outset #fff; padding: 5px 12px; cursor: pointer; }
-.btn-classic:active { border-style: inset; }
+/* Modern Classic Login */
+#loginSection { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #f0f0f0; border-radius: 8px; width: 340px; z-index: 1000; box-shadow: 0 10px 25px rgba(0,0,0,0.3); overflow: hidden; border: 1px solid #ccc; }
+.window-header { background: linear-gradient(90deg, #0000aa, #3b88d8); color: white; padding: 10px 15px; font-weight: bold; display: flex; justify-content: space-between; font-size: 14px; }
+.window-body { padding: 25px 30px; background: #fff; }
+.login-input { padding: 8px 10px; width: 100%; border: 1px solid #aaa; border-radius: 4px; background: #fafafa; font-size: 14px; box-sizing: border-box; }
+.login-input:focus { border-color: #3b88d8; outline: none; background: #fff; }
+.btn-modern { width: 100%; background: #0000aa; color: white; border: none; padding: 10px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 14px; margin-top: 10px; }
+.btn-modern:hover { background: #3b88d8; }
 
-/* Struktur Utama Qube System */
+/* Layout Grid */
 #workspaceSection { display: flex; flex-direction: column; height: 100vh; }
-
-/* Top Bar & Menu */
 .top-bar { background: #fff; padding: 3px; border-bottom: 1px solid #888; }
 .menu-bar { display: flex; gap: 18px; padding: 3px 6px; color: #000; font-size: 13px; }
-.menu-bar span { cursor: default; }
 .blue-title-bar { background: #0000aa; color: white; padding: 4px 6px; font-weight: bold; display: flex; align-items: center; gap: 10px; font-size: 14px; }
-
-/* Toolbar */
 .toolbar { background: #d4d0c8; padding: 6px; border-bottom: 1px solid #888; display: flex; gap: 6px; align-items: center; }
 .toolbar button { background: #d4d0c8; border: 1px solid transparent; padding: 4px 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
 .toolbar button:hover { border: 1px outset #fff; }
 .toolbar button:active { border: 1px inset #fff; }
-.file-upload-wrapper { position: relative; overflow: hidden; display: inline-block; }
-.file-upload-wrapper input[type=file] { font-size: 100px; position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; }
-
-/* Layout Grid */
 .main-layout { display: flex; flex-grow: 1; overflow: hidden; }
 
-/* Left Sidebar */
+/* Sidebar & Navigation */
 .left-sidebar { width: 200px; background: #e8e8e8; border-right: 2px solid #888; display: flex; flex-direction: column; }
 .sidebar-title { background: #a0a0a0; color: white; padding: 6px 10px; font-weight: bold; font-size: 14px; }
-.sidebar-list { padding: 12px; flex-grow: 1; background: #fff; border-bottom: 2px solid #d4d0c8; }
-.sidebar-item { display: flex; align-items: center; gap: 6px; padding: 4px 0; cursor: pointer; color: #333; }
+.sidebar-list { padding: 12px 0; flex-grow: 1; background: #fff; border-bottom: 2px solid #d4d0c8; }
+.sidebar-item { padding: 6px 12px; cursor: pointer; color: #333; display: flex; align-items: center; gap: 8px; border-left: 3px solid transparent; }
+.sidebar-item:hover { background: #f0f0f0; }
+.sidebar-item.active { background: #e0e0e0; border-left-color: #0000aa; font-weight: bold; }
 .sidebar-accordion { background: #d4d0c8; }
 .accordion-btn { display: block; width: 100%; text-align: left; background: #d4d0c8; border: 1px solid #fff; border-bottom: 1px solid #888; border-right: 1px solid #888; padding: 6px 12px; font-weight: bold; cursor: pointer; }
 .accordion-btn.active { background: #c0c0c0; }
 
-/* Center Content */
-.center-content { flex-grow: 1; display: flex; flex-direction: column; background: #fff; overflow: auto; }
-.stock-take-header { background: #3b88d8; color: white; padding: 8px 12px; font-size: 18px; font-weight: bold; border-bottom: 2px solid #fff; }
+/* Center Content & Tabs */
+.center-content { flex-grow: 1; display: flex; flex-direction: column; background: #fff; overflow: hidden; }
+.stock-take-header { background: #3b88d8; color: white; padding: 8px 12px; font-size: 18px; font-weight: bold; border-bottom: 2px solid #fff; text-transform: uppercase; }
+.content-panel { flex-grow: 1; display: flex; flex-direction: column; overflow-y: auto; }
+.hidden-panel { display: none !important; }
 
-/* Blue Data Panel */
+/* Drag & Drop Upload UI */
+.upload-container { display: flex; gap: 20px; flex-wrap: wrap; }
+.upload-box { background: #f8f9fa; border: 1px solid #ccc; padding: 20px; border-radius: 6px; flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: 10px; }
+.upload-title { font-weight: bold; font-size: 15px; border-bottom: 1px solid #ddd; padding-bottom: 10px; margin-bottom: 10px; color: #333; }
+.drop-zone { border: 2px dashed #888; border-radius: 6px; padding: 30px; text-align: center; background: #fff; cursor: pointer; transition: 0.2s; }
+.drop-zone.dragover { background: #e8f0fe; border-color: #3b88d8; }
+.file-info { font-size: 12px; color: #555; font-style: italic; text-align: center; }
+.progress-container { width: 100%; background: #e0e0e0; border-radius: 4px; overflow: hidden; height: 18px; margin-top: 5px; }
+.progress-bar { height: 100%; background: #00a000; width: 0%; text-align: center; color: white; font-size: 11px; line-height: 18px; transition: width 0.3s; }
+.upload-status { text-align: center; font-weight: bold; font-size: 12px; }
+.btn-upload { background: #0000aa; color: white; border: 1px outset #fff; font-weight: bold; padding: 6px; margin-top: 5px; }
+.btn-upload:active { border-style: inset; }
+
+/* Entry Panel UI */
 .blue-panel { background: #8bc3ff; border-bottom: 2px solid #fff; display: flex; padding: 12px; gap: 18px; }
 .panel-section { border: 1px solid #fff; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
 .input-group { display: flex; align-items: center; gap: 6px; }
 .input-group label { width: 80px; }
 .input-style { border: 2px inset #fff; background: #fff; padding: 3px 5px; }
 .input-green { background: #55ff55; border: 1px solid #000; padding: 3px; width: 90px; font-weight: bold; text-align: center; }
-
-/* Data Entry Bar */
 .entry-bar { background: #d4d0c8; padding: 8px 12px; border-bottom: 1px solid #888; display: flex; align-items: center; gap: 12px; }
 
 /* Table */
@@ -60,16 +67,13 @@ table { width: 100%; border-collapse: collapse; background: #fff; }
 th { background: #d4d0c8; border: 1px outset #fff; padding: 6px; text-align: left; font-weight: normal; font-size: 13px; }
 td { border: 1px solid #ccc; padding: 6px; font-size: 13px; }
 .qty-input { width: 60px; border: 1px solid #888; text-align: right; font-weight: bold; }
-.row-selected { background: #e0e0e0; }
 
-/* Right Sidebar (Status) */
+/* Right Sidebar */
 .right-sidebar { width: 90px; background: #006600; color: white; border-left: 2px inset #fff; display: flex; flex-direction: column; }
-.status-header { background: #e0e0e0; color: #000; padding: 4px; text-align: center; font-weight: bold; border-bottom: 1px solid #888; font-size: 13px; }
+.status-header { background: #e0e0e0; color: #000; padding: 4px; text-align: center; font-weight: bold; border-bottom: 1px solid #888; }
 .status-list { padding: 12px 6px; display: flex; flex-direction: column; gap: 10px; }
-.status-item { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; }
+.status-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
 .status-icon { width: 12px; height: 12px; border: 1px solid #fff; background: #00a000; }
 .status-icon.red { background: red; border-radius: 50%; }
-
-/* Utility */
 .var-neg { color: red; font-weight: bold; }
 .var-pos { color: green; font-weight: bold; }
