@@ -2,7 +2,7 @@
  * KONFIGURASI SISTEM & MAPPING USER
  */
 const Config = {
-    // URL Google Apps Script Web App (Isi setelah deploy backend)
+    // URL Web App Google Apps Script Resmi Anda
     GOOGLE_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbwBnHSNiuboFv2KujFfqHBfxWvk3xJpkuAqqNnu4zSLDiEMu-YDSBSG5ERakchme9Tr/exec", 
     
     UserMapping: {
@@ -17,13 +17,13 @@ const Config = {
 };
 
 /**
- * STATE MANAGEMENT (Menyimpan data memori & persistensi ke LocalStorage)
+ * STATE MANAGEMENT
  */
 const State = {
     currentUser: null,
     currentStore: null,
-    mainDatabase: {}, // Format: { "SKU123": { qtySystem: 10, description: "Item A" } }
-    scanData: [],     // Format: [ { sku: "SKU123", rack: "A1", qtyFisik: null } ]
+    mainDatabase: {}, 
+    scanData: [],     
     currentRack: "-",
 
     saveLocal: function() {
@@ -40,13 +40,17 @@ const State = {
     loadLocal: function() {
         const saved = localStorage.getItem('miniStockTakeState');
         if (saved) {
-            const data = JSON.parse(saved);
-            this.currentUser = data.currentUser;
-            this.currentStore = data.currentStore;
-            this.mainDatabase = data.mainDatabase;
-            this.scanData = data.scanData;
-            this.currentRack = data.currentRack;
-            return true;
+            try {
+                const data = JSON.parse(saved);
+                this.currentUser = data.currentUser || null;
+                this.currentStore = data.currentStore || null;
+                this.mainDatabase = data.mainDatabase || {};
+                this.scanData = data.scanData || [];
+                this.currentRack = data.currentRack || "-";
+                return true;
+            } catch(e) {
+                return false;
+            }
         }
         return false;
     },
@@ -65,21 +69,18 @@ const State = {
  * FILE PARSER LOGIC
  */
 const Parser = {
-    // Parser untuk Main Database .txt (Format CSV)
     parseMainDb: function(csvText) {
         const lines = csvText.split(/\r?\n/);
         const db = {};
         
-        // Asumsi baris 1 adalah header, mulai dari i = 1
         for (let i = 1; i < lines.length; i++) {
             if (!lines[i].trim()) continue;
             
-            // Memisahkan berdasarkan koma.
             const cols = lines[i].split(',');
             if (cols.length >= 9) {
                 const sku = cols[0].trim();
-                const qtySystem = parseInt(cols[3].trim()) || 0; // Kolom ke-4 (index 3) adalah Qty
-                const description = cols[8].trim(); // Kolom ke-9 (index 8) adalah Deskripsi
+                const qtySystem = parseInt(cols[3].trim()) || 0;
+                const description = cols[8].trim();
 
                 db[sku] = {
                     qtySystem: qtySystem,
@@ -90,7 +91,6 @@ const Parser = {
         return db;
     },
 
-    // Parser untuk Data Scan (3 Kolom, menggunakan koma atau tab)
     parseScanData: function(text) {
         const lines = text.split(/\r?\n/);
         const scanResult = [];
@@ -99,20 +99,19 @@ const Parser = {
         for (let i = 0; i < lines.length; i++) {
             if (!lines[i].trim()) continue;
             
-            // Mendeteksi pemisah (bisa tab atau koma)
             const delimiter = lines[i].includes('\t') ? '\t' : ',';
             const cols = lines[i].split(delimiter);
             
             if (cols.length >= 3) {
-                const sku = cols[1].trim(); // Kolom ke-2 (index 1) adalah SKU
-                const rack = cols[2].trim(); // Kolom ke-3 (index 2) adalah Rack/Alamat
+                const sku = cols[1].trim(); 
+                const rack = cols[2].trim(); 
                 
-                if (detectedRack === "-") detectedRack = rack; // Ambil rack dari baris pertama
+                if (detectedRack === "-") detectedRack = rack;
 
                 scanResult.push({
                     sku: sku,
                     rack: rack,
-                    qtyFisik: "" // Default kosong untuk diisi user
+                    qtyFisik: "" 
                 });
             }
         }
@@ -121,19 +120,22 @@ const Parser = {
 };
 
 /**
- * UI CONTROLLER (Manipulasi DOM)
+ * UI CONTROLLER
  */
 const UI = {
     initLoginState: function() {
+        const loginSec = document.getElementById('loginSection');
+        const workSec = document.getElementById('workspaceSection');
+        
         if (State.currentUser) {
-            document.getElementById('loginSection').classList.add('hidden');
-            document.getElementById('workspaceSection').classList.remove('hidden');
+            loginSec.classList.add('hidden');
+            workSec.classList.remove('hidden');
             document.getElementById('displayUserId').innerText = State.currentUser;
             document.getElementById('displayStoreCode').innerText = State.currentStore;
             this.renderTable();
         } else {
-            document.getElementById('loginSection').classList.remove('hidden');
-            document.getElementById('workspaceSection').classList.add('hidden');
+            loginSec.classList.remove('hidden');
+            workSec.classList.add('hidden');
         }
     },
 
@@ -151,18 +153,15 @@ const UI = {
             return;
         }
 
-        // Tampilkan Info Rak
         document.getElementById('displayRack').innerText = State.currentRack;
         rackInfo.classList.remove('hidden');
         btnSave.classList.remove('hidden');
 
-        // Render Baris Data
         State.scanData.forEach((item, index) => {
             const dbInfo = State.mainDatabase[item.sku] || { qtySystem: 0, description: "SKU NOT FOUND IN DB" };
             const sysQty = dbInfo.qtySystem;
             const fisikQty = item.qtyFisik !== "" ? item.qtyFisik : "";
             
-            // Kalkulasi Variance awal (jika fisik kosong, variance kosong)
             let varianceTxt = "-";
             let varianceClass = "";
             if (fisikQty !== "") {
@@ -184,7 +183,6 @@ const UI = {
             tbody.appendChild(tr);
         });
 
-        // Pasang Event Listener untuk setiap input Qty Fisik
         document.querySelectorAll('.qty-input').forEach(input => {
             input.addEventListener('input', UI.handleQtyChange);
         });
@@ -194,13 +192,11 @@ const UI = {
         const index = e.target.getAttribute('data-index');
         let val = e.target.value;
         
-        // Mencegah input non-numerik 
         if(val !== "" && val < 0) { e.target.value = 0; val = 0; }
         
         State.scanData[index].qtyFisik = val;
-        State.saveLocal(); // Simpan otomatis setiap perubahan angka
+        State.saveLocal();
 
-        // Update Variance secara langsung di UI
         const dbInfo = State.mainDatabase[State.scanData[index].sku] || { qtySystem: 0 };
         const tr = e.target.closest('tr');
         const varianceCell = tr.querySelector('.variance-cell');
@@ -224,17 +220,11 @@ const App = {
         State.loadLocal();
         UI.initLoginState();
 
-        // 1. Event Login
-        document.getElementById('btnLogin').addEventListener('click', () => {
-            const id = document.getElementById('userIdInput').value.trim().toUpperCase();
-            if (Config.UserMapping[id]) {
-                State.currentUser = id;
-                State.currentStore = Config.UserMapping[id];
-                State.saveLocal();
-                UI.initLoginState();
-                document.getElementById('loginError').style.display = 'none';
-            } else {
-                document.getElementById('loginError').style.display = 'block';
+        // 1. Event Login (Klik & Enter)
+        document.getElementById('btnLogin').addEventListener('click', App.handleLogin);
+        document.getElementById('userIdInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                App.handleLogin();
             }
         });
 
@@ -256,7 +246,7 @@ const App = {
                 State.mainDatabase = db;
                 State.saveLocal();
                 alert("Database Utama berhasil dimuat!");
-                UI.renderTable(); // Update tabel jika data scan sudah ada
+                UI.renderTable();
             };
             reader.readAsText(file);
         });
@@ -265,7 +255,7 @@ const App = {
         document.getElementById('scanFile').addEventListener('change', (e) => {
             if (Object.keys(State.mainDatabase).length === 0) {
                 alert("Peringatan: Silakan upload Database Utama terlebih dahulu!");
-                e.target.value = ""; // Reset input
+                e.target.value = "";
                 return;
             }
             const file = e.target.files[0];
@@ -283,7 +273,6 @@ const App = {
 
         // 5. Submit ke Google Spreadsheet
         document.getElementById('btnSaveToCloud').addEventListener('click', async () => {
-            // Validasi apakah ada Qty Fisik yang masih kosong
             const hasEmpty = State.scanData.some(item => item.qtyFisik === "");
             if(hasEmpty) {
                 const proceed = confirm("Masih ada Qty Fisik yang kosong. Apakah Anda tetap ingin mengirim data ke sistem?");
@@ -311,21 +300,19 @@ const App = {
             };
 
             try {
-                // Fetch Request ke Google Apps Script (Metode POST)
-                const response = await fetch(Config.GOOGLE_SCRIPT_URL, {
+                await fetch(Config.GOOGLE_SCRIPT_URL, {
                     method: 'POST',
-                    mode: 'no-cors', // Penting untuk bypass CORS Policy dari client browser
+                    mode: 'no-cors',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
                 
                 alert(`Data Rack ${State.currentRack} berhasil disave ke spreadsheet!`);
-                // Clear state pemindaian saat ini agar siap untuk rak berikutnya
                 State.scanData = [];
                 State.currentRack = "-";
                 State.saveLocal();
                 UI.renderTable();
-                document.getElementById('scanFile').value = ""; // reset form file
+                document.getElementById('scanFile').value = "";
             } catch (error) {
                 alert("Gagal menghubungi server. Pastikan koneksi internet stabil.");
             } finally {
@@ -333,10 +320,31 @@ const App = {
                 btn.disabled = false;
             }
         });
+    },
+
+    handleLogin: function() {
+        const inputElem = document.getElementById('userIdInput');
+        const errorElem = document.getElementById('loginError');
+        const id = inputElem.value.trim().toUpperCase();
+        
+        if (!id) {
+            alert("Silakan masukkan User ID terlebih dahulu!");
+            return;
+        }
+
+        if (Config.UserMapping[id]) {
+            State.currentUser = id;
+            State.currentStore = Config.UserMapping[id];
+            State.saveLocal();
+            UI.initLoginState();
+            errorElem.style.display = 'none';
+        } else {
+            errorElem.style.display = 'block';
+            alert(`User ID "${id}" tidak terdaftar dalam sistem! Sila cek kembali.`);
+        }
     }
 };
 
-// Jalankan App saat dokumen dimuat
-window.onload = () => {
+document.addEventListener('DOMContentLoaded', () => {
     App.init();
-};
+});
