@@ -4,89 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Qube Back End System - [Stock Take]</title>
-    <!-- Library untuk membaca Excel, CSV, TXT -->
+    
+    <!-- Library Eksternal -->
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-    <!-- Library untuk PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     
-    <style>
-        /* Gaya UI Klasik ala Windows XP / VB6 */
-        body { font-family: 'Tahoma', 'MS Sans Serif', sans-serif; background-color: #d4d0c8; color: #000; margin: 0; padding: 0; font-size: 11px; overflow-x: hidden; }
-        .hidden { display: none !important; }
-        input, select, button { font-family: 'Tahoma', 'MS Sans Serif', sans-serif; font-size: 11px; }
-        
-        /* Modal Login */
-        #loginSection { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #d4d0c8; border: 2px outset #fff; padding: 2px; width: 300px; z-index: 1000; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); }
-        .window-header { background: #0000aa; color: white; padding: 3px 5px; font-weight: bold; display: flex; justify-content: space-between; }
-        .window-body { padding: 15px; border: 2px inset #fff; margin-top: 2px; background: #d4d0c8; }
-        .btn-classic { background: #d4d0c8; border: 2px outset #fff; padding: 4px 10px; cursor: pointer; }
-        .btn-classic:active { border-style: inset; }
-
-        /* Struktur Utama Qube System */
-        #workspaceSection { display: flex; flex-direction: column; height: 100vh; }
-        
-        /* Top Bar & Menu */
-        .top-bar { background: #fff; padding: 2px; border-bottom: 1px solid #888; }
-        .menu-bar { display: flex; gap: 15px; padding: 2px 5px; color: #000; font-size: 11px; }
-        .menu-bar span { cursor: default; }
-        .blue-title-bar { background: #0000aa; color: white; padding: 2px 5px; font-weight: bold; display: flex; align-items: center; gap: 10px; }
-        
-        /* Toolbar Buatan untuk Integrasi Fitur App */
-        .toolbar { background: #d4d0c8; padding: 4px; border-bottom: 1px solid #888; display: flex; gap: 5px; align-items: center; }
-        .toolbar button { background: #d4d0c8; border: 1px solid transparent; padding: 2px 5px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
-        .toolbar button:hover { border: 1px outset #fff; }
-        .toolbar button:active { border: 1px inset #fff; }
-        .file-upload-wrapper { position: relative; overflow: hidden; display: inline-block; }
-        .file-upload-wrapper input[type=file] { font-size: 100px; position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; }
-
-        /* Layout Grid */
-        .main-layout { display: flex; flex-grow: 1; overflow: hidden; }
-        
-        /* Left Sidebar */
-        .left-sidebar { width: 180px; background: #e8e8e8; border-right: 2px solid #888; display: flex; flex-direction: column; }
-        .sidebar-title { background: #a0a0a0; color: white; padding: 4px 8px; font-weight: bold; font-size: 12px; }
-        .sidebar-list { padding: 10px; flex-grow: 1; background: #fff; border-bottom: 2px solid #d4d0c8; }
-        .sidebar-item { display: flex; align-items: center; gap: 5px; padding: 2px 0; cursor: pointer; color: #333; }
-        .sidebar-accordion { background: #d4d0c8; }
-        .accordion-btn { display: block; width: 100%; text-align: left; background: #d4d0c8; border: 1px solid #fff; border-bottom: 1px solid #888; border-right: 1px solid #888; padding: 4px 10px; font-weight: bold; cursor: pointer; }
-        .accordion-btn.active { background: #c0c0c0; }
-
-        /* Center Content */
-        .center-content { flex-grow: 1; display: flex; flex-direction: column; background: #fff; overflow: auto; }
-        .stock-take-header { background: #3b88d8; color: white; padding: 5px 10px; font-size: 16px; font-weight: bold; border-bottom: 2px solid #fff; }
-        
-        /* Blue Data Panel */
-        .blue-panel { background: #8bc3ff; border-bottom: 2px solid #fff; display: flex; padding: 10px; gap: 15px; }
-        .panel-section { border: 1px solid #fff; padding: 10px; display: flex; flex-direction: column; gap: 4px; }
-        .input-group { display: flex; align-items: center; gap: 5px; }
-        .input-group label { width: 70px; }
-        .input-style { border: 2px inset #fff; background: #fff; padding: 2px 4px; }
-        .input-green { background: #55ff55; border: 1px solid #000; padding: 2px; width: 80px; font-weight: bold; }
-        
-        /* Data Entry Bar */
-        .entry-bar { background: #d4d0c8; padding: 5px 10px; border-bottom: 1px solid #888; display: flex; align-items: center; gap: 10px; }
-        
-        /* Table */
-        .table-container { flex-grow: 1; background: #d4d0c8; padding: 2px; }
-        table { width: 100%; border-collapse: collapse; background: #fff; }
-        th { background: #d4d0c8; border: 1px outset #fff; padding: 4px; text-align: left; font-weight: normal; }
-        td { border: 1px solid #ccc; padding: 4px; }
-        .qty-input { width: 50px; border: 1px solid #888; text-align: right; }
-        .row-selected { background: #e0e0e0; }
-
-        /* Right Sidebar (Status) */
-        .right-sidebar { width: 80px; background: #006600; color: white; border-left: 2px inset #fff; display: flex; flex-direction: column; }
-        .status-header { background: #e0e0e0; color: #000; padding: 2px; text-align: center; font-weight: bold; border-bottom: 1px solid #888; }
-        .status-list { padding: 10px 5px; display: flex; flex-direction: column; gap: 8px; }
-        .status-item { display: flex; align-items: center; gap: 5px; cursor: pointer; }
-        .status-icon { width: 10px; height: 10px; border: 1px solid #fff; background: #00a000; }
-        .status-icon.red { background: red; border-radius: 50%; }
-        
-        /* Utility */
-        .var-neg { color: red; font-weight: bold; }
-        .var-pos { color: green; font-weight: bold; }
-    </style>
+    <!-- Panggilan File CSS -->
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
@@ -113,7 +38,7 @@
         
         <!-- Header & Menus -->
         <div class="top-bar">
-            <div style="padding: 2px 5px; font-weight:bold;">Qube Back End System 20.106.5.0 ENU - [Stock Take]</div>
+            <div style="padding: 4px 6px; font-weight:bold;">Qube Back End System 20.106.5.0 ENU - [Stock Take]</div>
             <div class="menu-bar">
                 <span><u>N</u>avigator</span> <span><u>V</u>iew</span> <span><u>T</u>ools</span> <span><u>P</u>rocess</span> <span><u>S</u>tore</span>
             </div>
@@ -123,7 +48,7 @@
             <span style="margin-left: 20px;" id="sysTitleName">PT. NIAGA INDOGUNA YASA</span>
         </div>
         
-        <!-- Toolbar App Integration -->
+        <!-- Toolbar -->
         <div class="toolbar">
             <div class="file-upload-wrapper">
                 <button title="Upload Database Utama (TXT/CSV/XLSX)">📁 <u>1</u>. Upload Master DB</button>
@@ -133,7 +58,7 @@
                 <button title="Upload Data Scan Scanner">📠 <u>2</u>. Upload Scan Data</button>
                 <input type="file" id="scanFile" accept=".txt,.csv,.xls,.xlsx">
             </div>
-            <div style="border-left: 1px solid #888; height: 16px; margin: 0 5px;"></div>
+            <div style="border-left: 1px solid #888; height: 18px; margin: 0 5px;"></div>
             <button id="btnDownloadPDF" title="Export to PDF">📄 Download Stock Sheet</button>
             <button id="btnSaveToCloud" title="Save to Google Sheets">💾 Update & Save Data</button>
             <button id="btnLogout" title="Logout System" style="margin-left: auto;">🚪 Exit</button>
@@ -170,50 +95,50 @@
                     <div class="panel-section" style="flex: 1;">
                         <div class="input-group">
                             <label>Ref.No.</label>
-                            <input type="text" class="input-style" style="width: 20px;" value="P" readonly>
+                            <input type="text" class="input-style" style="width: 25px;" value="P" readonly>
                             <div class="input-green" id="dispRefNo">0000000000</div>
                         </div>
                         <div style="height: 10px;"></div>
                         <div class="input-group">
                             <label>Process At</label>
-                            <input type="text" class="input-style" style="width: 50px;" id="dispRack" value="-" readonly>
+                            <input type="text" class="input-style" style="width: 60px;" id="dispRack" value="-" readonly>
                             <input type="text" class="input-style" style="flex:1;" readonly>
                         </div>
                         <div class="input-group">
                             <label>Store</label>
-                            <input type="text" class="input-style" style="width: 50px;" id="dispStore" readonly>
+                            <input type="text" class="input-style" style="width: 60px;" id="dispStore" readonly>
                             <input type="text" class="input-style" style="flex:1;" value="PT Niaga Indoguna Yasa" readonly>
                         </div>
                         <div style="height: 10px;"></div>
                         <div class="input-group">
                             <label>Prepare By</label>
-                            <input type="text" class="input-style" style="width: 50px;" id="dispUser" readonly>
+                            <input type="text" class="input-style" style="width: 60px;" id="dispUser" readonly>
                             <input type="text" class="input-style" style="flex:1;" id="dispUserFull" readonly>
                         </div>
                     </div>
                     
-                    <div class="panel-section" style="width: 200px;">
+                    <div class="panel-section" style="width: 220px;">
                         <div class="input-group">
-                            <label style="width: 60px;">Doc.Date</label>
-                            <input type="text" class="input-style" style="width: 100px;" id="dispDate" readonly>
+                            <label style="width: 70px;">Doc.Date</label>
+                            <input type="text" class="input-style" style="width: 110px;" id="dispDate" readonly>
                         </div>
                         <div style="height: 30px;"></div>
                         <div class="input-group">
-                            <label style="width: 60px;"># Item/Qty</label>
-                            <input type="text" class="input-style" style="width: 30px;" id="dispTotalItem" value="0" readonly>
-                            <input type="text" class="input-style" style="width: 30px;" id="dispTotalQty" value="0" readonly>
+                            <label style="width: 70px;"># Item/Qty</label>
+                            <input type="text" class="input-style" style="width: 40px;" id="dispTotalItem" value="0" readonly>
+                            <input type="text" class="input-style" style="width: 40px;" id="dispTotalQty" value="0" readonly>
                         </div>
-                        <div style="margin-top: 5px; font-size: 10px; border-top:1px solid #fff; padding-top:2px;">Special Instruction</div>
-                        <textarea class="input-style" style="height: 40px; resize:none;"></textarea>
+                        <div style="margin-top: 5px; font-size: 11px; border-top:1px solid #fff; padding-top:2px;">Special Instruction</div>
+                        <textarea class="input-style" style="height: 45px; resize:none;"></textarea>
                     </div>
                 </div>
 
                 <!-- Table Entry Bar -->
                 <div class="entry-bar">
                     <span>Enter Code Here</span>
-                    <input type="text" class="input-style" style="width: 120px;" readonly placeholder="Scanner input...">
+                    <input type="text" class="input-style" style="width: 140px;" readonly placeholder="Scanner input...">
                     <span>Quantity</span>
-                    <input type="text" class="input-style" style="width: 50px;" readonly>
+                    <input type="text" class="input-style" style="width: 60px;" readonly>
                     <button class="btn-classic">Enter</button>
                 </div>
 
@@ -222,16 +147,16 @@
                     <table id="mainTable">
                         <thead>
                             <tr>
-                                <th style="width: 25px;">#No.</th>
-                                <th style="width: 100px;">Sku Code</th>
+                                <th style="width: 35px;">#No.</th>
+                                <th style="width: 120px;">Sku Code</th>
                                 <th>Description</th>
-                                <th style="width: 70px; text-align:center;">Qty System</th>
-                                <th style="width: 70px; text-align:center;">Qty Fisik</th>
-                                <th style="width: 70px; text-align:center;">Variance</th>
+                                <th style="width: 80px; text-align:center;">Qty System</th>
+                                <th style="width: 80px; text-align:center;">Qty Fisik</th>
+                                <th style="width: 80px; text-align:center;">Variance</th>
                             </tr>
                         </thead>
                         <tbody id="tableBody">
-                            <tr><td colspan="6" style="text-align:center; color:#555;">No records. Please upload Main DB and Scan Data.</td></tr>
+                            <tr><td colspan="6" style="text-align:center; color:#555; padding: 15px;">No records. Please upload Main DB and Scan Data.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -253,294 +178,7 @@
         </div>
     </div>
 
-<script>
-/**
- * Konfigurasi API
- */
-const Config = {
-    GOOGLE_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbwBnHSNiuboFv2KujFfqHBfxWvk3xJpkuAqqNnu4zSLDiEMu-YDSBSG5ERakchme9Tr/exec", 
-    UserMapping: {
-        "XGSS": "JC2017", "XBDS": "JC8001", "XWGN": "JC2021", "XPRC": "JC1029",
-        "XRES": "JC1020", "XWDR": "JC3001", "SLGD": "JC2001", "EPPKA": "JC2008",
-        "XLWU": "JC5005", "XJLB": "JC6003", "XBLO": "JC2012", "XLUN": "JC1014",
-        "XSRS": "JC2018", "XSRA": "JC4006", "XSRG": "JC8005", "XRMO": "JC3003",
-        "XKTR": "JC1005", "XPMH": "JC5002", "XOYO": "JC1012", "SLSQ": "JC2002",
-        "XKTS": "JC5003", "XDLU": "JC8006", "XPKL": "JC2016", "XKLA": "JC1027",
-        "XKLN": "JC8004"
-    }
-};
-
-/**
- * State Management
- */
-const State = {
-    currentUser: null, currentStore: null, mainDatabase: {}, scanData: [], currentRack: "-",
-    saveLocal: function() {
-        localStorage.setItem('qubeStockTakeState', JSON.stringify({
-            currentUser: this.currentUser, currentStore: this.currentStore,
-            mainDatabase: this.mainDatabase, scanData: this.scanData, currentRack: this.currentRack
-        }));
-    },
-    loadLocal: function() {
-        const saved = localStorage.getItem('qubeStockTakeState');
-        if (saved) {
-            try {
-                const data = JSON.parse(saved);
-                this.currentUser = data.currentUser || null; this.currentStore = data.currentStore || null;
-                this.mainDatabase = data.mainDatabase || {}; this.scanData = data.scanData || [];
-                this.currentRack = data.currentRack || "-"; return true;
-            } catch(e) { return false; }
-        }
-        return false;
-    },
-    clearLocal: function() {
-        localStorage.removeItem('qubeStockTakeState');
-        this.currentUser = null; this.currentStore = null; this.mainDatabase = {}; this.scanData = []; this.currentRack = "-";
-    }
-};
-
-/**
- * Parser Engine Menggunakan SheetJS untuk (TXT, CSV, XLS, XLSX)
- */
-const FileProcessor = {
-    processFile: function(file, isMainDb, callback) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            const data = new Uint8Array(e.target.result);
-            // SheetJS membaca buffer (otomatis deteksi format Excel/CSV/TXT delim)
-            const workbook = XLSX.read(data, {type: 'array'});
-            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-            // defval memastikan index kolom tetap terjaga meski cell kosong
-            const rows = XLSX.utils.sheet_to_json(firstSheet, {header: 1, defval: ""}); 
-            
-            if (isMainDb) {
-                const db = {};
-                // Asumsi baris 1 header, mulai i = 1
-                for (let i = 1; i < rows.length; i++) {
-                    const row = rows[i];
-                    if (row.length >= 9 && row[0]) {
-                        db[String(row[0]).trim()] = {
-                            qtySystem: parseInt(row[3]) || 0,
-                            description: String(row[8]).trim()
-                        };
-                    }
-                }
-                State.mainDatabase = db;
-            } else {
-                const scanResult = [];
-                let detectedRack = "-";
-                // Asumsi file scan tidak selalu ada header formal, baca semua baris
-                for (let i = 0; i < rows.length; i++) {
-                    const row = rows[i];
-                    if (row.length >= 3 && row[1]) {
-                        if (detectedRack === "-") detectedRack = String(row[2]).trim();
-                        scanResult.push({
-                            sku: String(row[1]).trim(),
-                            rack: String(row[2]).trim(),
-                            qtyFisik: ""
-                        });
-                    }
-                }
-                State.scanData = scanResult;
-                State.currentRack = detectedRack;
-            }
-            State.saveLocal();
-            callback();
-        };
-        reader.readAsArrayBuffer(file);
-    }
-};
-
-/**
- * UI Controller
- */
-const UI = {
-    updateDate: function() {
-        const today = new Date();
-        const dd = String(today.getDate()).padStart(2, '0');
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const yyyy = today.getFullYear();
-        document.getElementById('dispDate').value = `${dd}/${mm}/${yyyy}`;
-    },
-    initLoginState: function() {
-        if (State.currentUser) {
-            document.getElementById('loginSection').classList.add('hidden');
-            document.getElementById('workspaceSection').classList.remove('hidden');
-            
-            document.getElementById('dispUser').value = State.currentUser;
-            document.getElementById('dispUserFull').value = "ID-BM-" + State.currentUser;
-            document.getElementById('dispStore').value = State.currentStore;
-            document.getElementById('sysTitleName').innerText = "PT. NIAGA INDOGUNA YASA - " + State.currentStore + "-" + State.currentUser;
-            
-            // Random Ref No for realism
-            document.getElementById('dispRefNo').innerText = Math.floor(100000000 + Math.random() * 900000000);
-            this.updateDate();
-            this.renderTable();
-        } else {
-            document.getElementById('loginSection').classList.remove('hidden');
-            document.getElementById('workspaceSection').classList.add('hidden');
-        }
-    },
-    renderTable: function() {
-        const tbody = document.getElementById('tableBody');
-        tbody.innerHTML = '';
-        
-        document.getElementById('dispRack').value = State.currentRack;
-        document.getElementById('dispTotalItem').value = State.scanData.length;
-
-        if (State.scanData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#555;">No records.</td></tr>';
-            document.getElementById('dispTotalQty').value = 0;
-            return;
-        }
-
-        let totalFisik = 0;
-        State.scanData.forEach((item, index) => {
-            const dbInfo = State.mainDatabase[item.sku] || { qtySystem: 0, description: "UNKNOWN SKU" };
-            let varianceTxt = "";
-            let varClass = "";
-            let fisikVal = item.qtyFisik;
-            
-            if (fisikVal !== "") {
-                totalFisik += parseInt(fisikVal);
-                const variance = parseInt(fisikVal) - dbInfo.qtySystem;
-                varianceTxt = variance;
-                if(variance < 0) varClass = "var-neg";
-                if(variance > 0) varClass = "var-pos";
-            }
-
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td style="text-align:right;">▶ ${index + 1}</td>
-                <td>${item.sku}</td>
-                <td>${dbInfo.description}</td>
-                <td style="text-align:center;">${dbInfo.qtySystem}</td>
-                <td style="text-align:center;"><input type="number" class="qty-input" data-index="${index}" value="${fisikVal}" min="0"></td>
-                <td style="text-align:center;" class="${varClass}">${varianceTxt}</td>
-            `;
-            tbody.appendChild(tr);
-        });
-
-        document.getElementById('dispTotalQty').value = totalFisik;
-        document.querySelectorAll('.qty-input').forEach(input => {
-            input.addEventListener('input', UI.handleQtyChange);
-        });
-    },
-    handleQtyChange: function(e) {
-        const index = e.target.getAttribute('data-index');
-        let val = e.target.value;
-        if(val !== "" && val < 0) { e.target.value = 0; val = 0; }
-        
-        State.scanData[index].qtyFisik = val;
-        State.saveLocal();
-        UI.renderTable(); // Re-render for totals and variance
-        
-        // Return focus to the input that was just edited to prevent losing cursor position
-        const inputs = document.querySelectorAll('.qty-input');
-        if(inputs[index]) inputs[index].focus();
-    }
-};
-
-/**
- * App Initialization
- */
-const App = {
-    init: function() {
-        State.loadLocal();
-        UI.initLoginState();
-
-        // 1. Login Events
-        document.getElementById('btnLogin').addEventListener('click', App.handleLogin);
-        document.getElementById('userIdInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') App.handleLogin(); });
-        
-        // 2. Logout
-        document.getElementById('btnLogout').addEventListener('click', () => {
-            if(confirm("Exit Application? Unsaved data will be lost.")) { State.clearLocal(); UI.initLoginState(); }
-        });
-
-        // 3. Upload Main DB (Universal File Reader)
-        document.getElementById('mainDbFile').addEventListener('change', (e) => {
-            const file = e.target.files[0]; if (!file) return;
-            FileProcessor.processFile(file, true, () => {
-                alert("Master Database Loaded Successfully.");
-                UI.renderTable();
-                e.target.value = "";
-            });
-        });
-
-        // 4. Upload Scan Data (Universal File Reader)
-        document.getElementById('scanFile').addEventListener('change', (e) => {
-            if (Object.keys(State.mainDatabase).length === 0) {
-                alert("Error: Please load Master DB first."); e.target.value = ""; return;
-            }
-            const file = e.target.files[0]; if (!file) return;
-            FileProcessor.processFile(file, false, () => {
-                UI.renderTable();
-                e.target.value = "";
-            });
-        });
-
-        // 5. Download PDF Feature
-        document.getElementById('btnDownloadPDF').addEventListener('click', () => {
-            if(State.scanData.length === 0) { alert("No data to export."); return; }
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-            
-            doc.setFontSize(14);
-            doc.text(`Stock Take Report - Rack: ${State.currentRack}`, 14, 15);
-            doc.setFontSize(10);
-            doc.text(`Store: ${State.currentStore} | User: ${State.currentUser} | Date: ${document.getElementById('dispDate').value}`, 14, 22);
-            
-            doc.autoTable({
-                html: '#mainTable',
-                startY: 28,
-                theme: 'grid',
-                headStyles: { fillColor: [0, 0, 170] }
-            });
-            
-            doc.save(`StockTake_${State.currentStore}_${State.currentRack}.pdf`);
-        });
-
-        // 6. Save to Spreadsheet
-        document.getElementById('btnSaveToCloud').addEventListener('click', async () => {
-            if(State.scanData.length === 0) return;
-            if(State.scanData.some(item => item.qtyFisik === "") && !confirm("Empty Physical Quantities exist. Proceed saving?")) return;
-            
-            const btn = document.getElementById('btnSaveToCloud');
-            btn.innerText = "Processing..."; btn.disabled = true;
-
-            const payload = {
-                userId: State.currentUser, storeCode: State.currentStore, rackNumber: State.currentRack,
-                data: State.scanData.map(item => {
-                    const dbInfo = State.mainDatabase[item.sku] || { qtySystem: 0, description: "" };
-                    const fisik = item.qtyFisik === "" ? 0 : parseInt(item.qtyFisik);
-                    return { sku: item.sku, description: dbInfo.description, qtySystem: dbInfo.qtySystem, qtyFisik: fisik, variance: fisik - dbInfo.qtySystem }
-                })
-            };
-
-            try {
-                await fetch(Config.GOOGLE_SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                alert(`Data for Rack ${State.currentRack} has been saved.`);
-                State.scanData = []; State.currentRack = "-"; State.saveLocal(); UI.renderTable();
-            } catch (error) { alert("Connection Error."); } 
-            finally { btn.innerText = "💾 Update & Save Data"; btn.disabled = false; }
-        });
-    },
-    
-    handleLogin: function() {
-        const id = document.getElementById('userIdInput').value.trim().toUpperCase();
-        if (!id) return;
-        if (Config.UserMapping[id]) {
-            State.currentUser = id; State.currentStore = Config.UserMapping[id]; State.saveLocal();
-            UI.initLoginState(); document.getElementById('loginError').style.display = 'none';
-        } else {
-            document.getElementById('loginError').style.display = 'block';
-        }
-    }
-};
-
-document.addEventListener('DOMContentLoaded', () => App.init());
-</script>
-
+    <!-- Panggilan File JS (Sesuai folder 'js' Anda di GitHub) -->
+    <script src="js/app.js"></script>
 </body>
 </html>
