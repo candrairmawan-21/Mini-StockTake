@@ -1,0 +1,75 @@
+/* Gaya UI Klasik ala Windows XP / VB6 dengan Font Diperbesar */
+body { font-family: 'Tahoma', 'MS Sans Serif', sans-serif; background-color: #d4d0c8; color: #000; margin: 0; padding: 0; font-size: 13px; overflow-x: hidden; }
+.hidden { display: none !important; }
+input, select, button, textarea { font-family: 'Tahoma', 'MS Sans Serif', sans-serif; font-size: 13px; }
+
+/* Modal Login */
+#loginSection { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #d4d0c8; border: 2px outset #fff; padding: 2px; width: 320px; z-index: 1000; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); }
+.window-header { background: #0000aa; color: white; padding: 4px 6px; font-weight: bold; display: flex; justify-content: space-between; font-size: 14px; }
+.window-body { padding: 18px; border: 2px inset #fff; margin-top: 2px; background: #d4d0c8; }
+.btn-classic { background: #d4d0c8; border: 2px outset #fff; padding: 5px 12px; cursor: pointer; }
+.btn-classic:active { border-style: inset; }
+
+/* Struktur Utama Qube System */
+#workspaceSection { display: flex; flex-direction: column; height: 100vh; }
+
+/* Top Bar & Menu */
+.top-bar { background: #fff; padding: 3px; border-bottom: 1px solid #888; }
+.menu-bar { display: flex; gap: 18px; padding: 3px 6px; color: #000; font-size: 13px; }
+.menu-bar span { cursor: default; }
+.blue-title-bar { background: #0000aa; color: white; padding: 4px 6px; font-weight: bold; display: flex; align-items: center; gap: 10px; font-size: 14px; }
+
+/* Toolbar */
+.toolbar { background: #d4d0c8; padding: 6px; border-bottom: 1px solid #888; display: flex; gap: 6px; align-items: center; }
+.toolbar button { background: #d4d0c8; border: 1px solid transparent; padding: 4px 6px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+.toolbar button:hover { border: 1px outset #fff; }
+.toolbar button:active { border: 1px inset #fff; }
+.file-upload-wrapper { position: relative; overflow: hidden; display: inline-block; }
+.file-upload-wrapper input[type=file] { font-size: 100px; position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; }
+
+/* Layout Grid */
+.main-layout { display: flex; flex-grow: 1; overflow: hidden; }
+
+/* Left Sidebar */
+.left-sidebar { width: 200px; background: #e8e8e8; border-right: 2px solid #888; display: flex; flex-direction: column; }
+.sidebar-title { background: #a0a0a0; color: white; padding: 6px 10px; font-weight: bold; font-size: 14px; }
+.sidebar-list { padding: 12px; flex-grow: 1; background: #fff; border-bottom: 2px solid #d4d0c8; }
+.sidebar-item { display: flex; align-items: center; gap: 6px; padding: 4px 0; cursor: pointer; color: #333; }
+.sidebar-accordion { background: #d4d0c8; }
+.accordion-btn { display: block; width: 100%; text-align: left; background: #d4d0c8; border: 1px solid #fff; border-bottom: 1px solid #888; border-right: 1px solid #888; padding: 6px 12px; font-weight: bold; cursor: pointer; }
+.accordion-btn.active { background: #c0c0c0; }
+
+/* Center Content */
+.center-content { flex-grow: 1; display: flex; flex-direction: column; background: #fff; overflow: auto; }
+.stock-take-header { background: #3b88d8; color: white; padding: 8px 12px; font-size: 18px; font-weight: bold; border-bottom: 2px solid #fff; }
+
+/* Blue Data Panel */
+.blue-panel { background: #8bc3ff; border-bottom: 2px solid #fff; display: flex; padding: 12px; gap: 18px; }
+.panel-section { border: 1px solid #fff; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.input-group { display: flex; align-items: center; gap: 6px; }
+.input-group label { width: 80px; }
+.input-style { border: 2px inset #fff; background: #fff; padding: 3px 5px; }
+.input-green { background: #55ff55; border: 1px solid #000; padding: 3px; width: 90px; font-weight: bold; text-align: center; }
+
+/* Data Entry Bar */
+.entry-bar { background: #d4d0c8; padding: 8px 12px; border-bottom: 1px solid #888; display: flex; align-items: center; gap: 12px; }
+
+/* Table */
+.table-container { flex-grow: 1; background: #d4d0c8; padding: 2px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; background: #fff; }
+th { background: #d4d0c8; border: 1px outset #fff; padding: 6px; text-align: left; font-weight: normal; font-size: 13px; }
+td { border: 1px solid #ccc; padding: 6px; font-size: 13px; }
+.qty-input { width: 60px; border: 1px solid #888; text-align: right; font-weight: bold; }
+.row-selected { background: #e0e0e0; }
+
+/* Right Sidebar (Status) */
+.right-sidebar { width: 90px; background: #006600; color: white; border-left: 2px inset #fff; display: flex; flex-direction: column; }
+.status-header { background: #e0e0e0; color: #000; padding: 4px; text-align: center; font-weight: bold; border-bottom: 1px solid #888; font-size: 13px; }
+.status-list { padding: 12px 6px; display: flex; flex-direction: column; gap: 10px; }
+.status-item { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; }
+.status-icon { width: 12px; height: 12px; border: 1px solid #fff; background: #00a000; }
+.status-icon.red { background: red; border-radius: 50%; }
+
+/* Utility */
+.var-neg { color: red; font-weight: bold; }
+.var-pos { color: green; font-weight: bold; }
