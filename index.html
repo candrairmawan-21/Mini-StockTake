@@ -26,7 +26,7 @@
             </div>
             <div style="margin-bottom: 15px;">
                 <label style="display:block; margin-bottom:5px; font-weight: bold; color: #555;">User ID / Store ID:</label>
-                <input type="text" id="userIdInput" class="input-style login-input" placeholder="Enter ID (e.g., XGSS)" autofocus>
+                <input type="text" id="userIdInput" class="input-style login-input" placeholder="Enter ID (e.g., XWGN)" autofocus>
             </div>
             <button id="btnLogin" class="btn-modern">Login to System</button>
             <p id="loginError" style="color:#d32f2f; display:none; margin-top:10px; text-align: center; font-weight: bold;">ID Not Found in System</p>
@@ -91,7 +91,7 @@
                             <div class="progress-container hidden" id="progContainerMain">
                                 <div class="progress-bar" id="progBarMain">0%</div>
                             </div>
-                            <button class="btn-classic btn-upload hidden" id="btnUploadMain">Upload Master DB</button>
+                            <button class="btn-classic btn-upload hidden" id="btnUploadMain">Process Master DB</button>
                             <div class="upload-status" id="statusMain"></div>
                         </div>
 
@@ -106,7 +106,7 @@
                             <div class="progress-container hidden" id="progContainerScan">
                                 <div class="progress-bar" id="progBarScan">0%</div>
                             </div>
-                            <button class="btn-classic btn-upload hidden" id="btnUploadScan">Upload Scan Data</button>
+                            <button class="btn-classic btn-upload hidden" id="btnUploadScan">Process Scan Data</button>
                             <div class="upload-status" id="statusScan"></div>
                         </div>
 
@@ -124,11 +124,16 @@
                                 <div class="input-green" id="dispRefNo">0000000000</div>
                             </div>
                             <div style="height: 10px;"></div>
+                            
+                            <!-- Rack Navigation Group -->
                             <div class="input-group">
                                 <label>Process At</label>
-                                <input type="text" class="input-style" style="width: 60px;" id="dispRack" value="-" readonly>
-                                <input type="text" class="input-style" style="flex:1;" readonly>
+                                <button class="btn-classic rack-nav-btn" id="btnPrevRack" title="Previous Rack">◀</button>
+                                <input type="text" class="input-style" style="width: 80px; text-align: center; font-weight: bold; background: #ffffcc;" id="dispRack" value="-" readonly>
+                                <button class="btn-classic rack-nav-btn" id="btnNextRack" title="Next Rack">▶</button>
+                                <span style="font-size: 11px; margin-left: 5px; color: #000;" id="dispRackCount">(0/0)</span>
                             </div>
+                            
                             <div class="input-group">
                                 <label>Store</label>
                                 <input type="text" class="input-style" style="width: 60px;" id="dispStoreCode" readonly>
