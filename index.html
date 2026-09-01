@@ -5,31 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Qube Back End System - [Stock Take]</title>
     
-    <!-- Library Eksternal -->
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
     
-    <!-- Panggilan File CSS -->
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-    <!-- MODAL LOGIN -->
+    <!-- MODAL LOGIN MODERN CLASSIC -->
     <div id="loginSection">
         <div class="window-header">
-            <span>System Login</span>
-            <span style="cursor:pointer; border:1px outset #fff; padding: 0 4px; background:#d4d0c8; color:black;">X</span>
+            <span>System Authentication</span>
+            <span style="cursor:pointer; font-size: 14px; opacity: 0.8;">✖</span>
         </div>
         <div class="window-body">
-            <div style="margin-bottom: 10px;">
-                <label style="display:block; margin-bottom:5px;">User ID:</label>
-                <input type="text" id="userIdInput" class="input-style" style="width:100%;" autofocus>
+            <div style="text-align: center; margin-bottom: 20px;">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c4/MR.DIY_logo.svg/512px-MR.DIY_logo.svg.png" alt="MR DIY Logo" style="height: 50px;">
+                <h3 style="margin: 10px 0 0 0; color: #333; font-family: 'Segoe UI', Tahoma, sans-serif;">Store Stock Take</h3>
             </div>
-            <div style="text-align: right;">
-                <button id="btnLogin" class="btn-classic">Login</button>
+            <div style="margin-bottom: 15px;">
+                <label style="display:block; margin-bottom:5px; font-weight: bold; color: #555;">User ID / Store ID:</label>
+                <input type="text" id="userIdInput" class="input-style login-input" placeholder="Enter ID (e.g., XGSS)" autofocus>
             </div>
-            <p id="loginError" style="color:red; display:none; margin-top:5px;">ID Not Found</p>
+            <button id="btnLogin" class="btn-modern">Login to System</button>
+            <p id="loginError" style="color:#d32f2f; display:none; margin-top:10px; text-align: center; font-weight: bold;">ID Not Found in System</p>
         </div>
     </div>
 
@@ -50,15 +50,6 @@
         
         <!-- Toolbar -->
         <div class="toolbar">
-            <div class="file-upload-wrapper">
-                <button title="Upload Database Utama (TXT/CSV/XLSX)">📁 <u>1</u>. Upload Master DB</button>
-                <input type="file" id="mainDbFile" accept=".txt,.csv,.xls,.xlsx">
-            </div>
-            <div class="file-upload-wrapper">
-                <button title="Upload Data Scan Scanner">📠 <u>2</u>. Upload Scan Data</button>
-                <input type="file" id="scanFile" accept=".txt,.csv,.xls,.xlsx">
-            </div>
-            <div style="border-left: 1px solid #888; height: 18px; margin: 0 5px;"></div>
             <button id="btnDownloadPDF" title="Export to PDF">📄 Download Stock Sheet</button>
             <button id="btnSaveToCloud" title="Save to Google Sheets">💾 Update & Save Data</button>
             <button id="btnLogout" title="Logout System" style="margin-left: auto;">🚪 Exit</button>
@@ -70,96 +61,127 @@
             <div class="left-sidebar">
                 <div class="sidebar-title">Inventory</div>
                 <div class="sidebar-list">
-                    <div class="sidebar-item">🗂️ Stock Take Preparation</div>
-                    <div class="sidebar-item" style="background:#e0e0e0;">📂 Stock Take Entry</div>
+                    <div class="sidebar-item nav-menu active" data-target="panel-prep">🗂️ Stock Take Preparation</div>
+                    <div class="sidebar-item nav-menu" data-target="panel-entry">📂 Stock Take Entry</div>
                 </div>
                 <div class="sidebar-accordion">
                     <button class="accordion-btn">Store</button>
                     <button class="accordion-btn">Security</button>
-                    <button class="accordion-btn">POS Settings</button>
-                    <button class="accordion-btn">Maintenance</button>
-                    <button class="accordion-btn">Stock AR</button>
-                    <button class="accordion-btn">Stock AP</button>
                     <button class="accordion-btn active">Inventory</button>
                     <button class="accordion-btn">Reporting</button>
-                    <button class="accordion-btn">TMS</button>
                 </div>
             </div>
 
-            <!-- Center Panel -->
+            <!-- Center Content Area -->
             <div class="center-content">
-                <div class="stock-take-header">STOCK TAKE</div>
+                <div class="stock-take-header" id="panelHeaderTitle">STOCK TAKE PREPARATION</div>
                 
-                <!-- Info Panel -->
-                <div class="blue-panel">
-                    <div class="panel-section" style="flex: 1;">
-                        <div class="input-group">
-                            <label>Ref.No.</label>
-                            <input type="text" class="input-style" style="width: 25px;" value="P" readonly>
-                            <div class="input-green" id="dispRefNo">0000000000</div>
+                <!-- PANEL 1: PREPARATION (Upload Area) -->
+                <div id="panel-prep" class="content-panel active-panel" style="padding: 20px;">
+                    <div class="upload-container">
+                        
+                        <!-- Upload Master DB -->
+                        <div class="upload-box">
+                            <div class="upload-title">1. Upload Master Database</div>
+                            <div class="drop-zone" id="dropZoneMain">
+                                <span class="drop-text">Drag & Drop file (.txt, .csv, .xls) here or <b style="color: #0000aa; text-decoration: underline; cursor: pointer;">Browse</b></span>
+                                <input type="file" id="mainDbFile" accept=".txt,.csv,.xls,.xlsx" hidden>
+                            </div>
+                            <div class="file-info" id="infoMainFile">No file selected</div>
+                            <div class="progress-container hidden" id="progContainerMain">
+                                <div class="progress-bar" id="progBarMain">0%</div>
+                            </div>
+                            <button class="btn-classic btn-upload hidden" id="btnUploadMain">Upload Master DB</button>
+                            <div class="upload-status" id="statusMain"></div>
                         </div>
-                        <div style="height: 10px;"></div>
-                        <div class="input-group">
-                            <label>Process At</label>
-                            <input type="text" class="input-style" style="width: 60px;" id="dispRack" value="-" readonly>
-                            <input type="text" class="input-style" style="flex:1;" readonly>
+
+                        <!-- Upload Scan Data -->
+                        <div class="upload-box">
+                            <div class="upload-title">2. Upload Scan Data</div>
+                            <div class="drop-zone" id="dropZoneScan">
+                                <span class="drop-text">Drag & Drop file (.txt, .csv, .xls) here or <b style="color: #0000aa; text-decoration: underline; cursor: pointer;">Browse</b></span>
+                                <input type="file" id="scanFile" accept=".txt,.csv,.xls,.xlsx" hidden>
+                            </div>
+                            <div class="file-info" id="infoScanFile">No file selected</div>
+                            <div class="progress-container hidden" id="progContainerScan">
+                                <div class="progress-bar" id="progBarScan">0%</div>
+                            </div>
+                            <button class="btn-classic btn-upload hidden" id="btnUploadScan">Upload Scan Data</button>
+                            <div class="upload-status" id="statusScan"></div>
                         </div>
-                        <div class="input-group">
-                            <label>Store</label>
-                            <input type="text" class="input-style" style="width: 60px;" id="dispStore" readonly>
-                            <input type="text" class="input-style" style="flex:1;" value="PT Niaga Indoguna Yasa" readonly>
-                        </div>
-                        <div style="height: 10px;"></div>
-                        <div class="input-group">
-                            <label>Prepare By</label>
-                            <input type="text" class="input-style" style="width: 60px;" id="dispUser" readonly>
-                            <input type="text" class="input-style" style="flex:1;" id="dispUserFull" readonly>
-                        </div>
+
                     </div>
+                </div>
+
+                <!-- PANEL 2: ENTRY (Data Table) -->
+                <div id="panel-entry" class="content-panel hidden-panel">
                     
-                    <div class="panel-section" style="width: 220px;">
-                        <div class="input-group">
-                            <label style="width: 70px;">Doc.Date</label>
-                            <input type="text" class="input-style" style="width: 110px;" id="dispDate" readonly>
+                    <div class="blue-panel">
+                        <div class="panel-section" style="flex: 1;">
+                            <div class="input-group">
+                                <label>Ref.No.</label>
+                                <input type="text" class="input-style" style="width: 25px;" value="P" readonly>
+                                <div class="input-green" id="dispRefNo">0000000000</div>
+                            </div>
+                            <div style="height: 10px;"></div>
+                            <div class="input-group">
+                                <label>Process At</label>
+                                <input type="text" class="input-style" style="width: 60px;" id="dispRack" value="-" readonly>
+                                <input type="text" class="input-style" style="flex:1;" readonly>
+                            </div>
+                            <div class="input-group">
+                                <label>Store</label>
+                                <input type="text" class="input-style" style="width: 60px;" id="dispStoreCode" readonly>
+                                <input type="text" class="input-style" style="flex:1;" id="dispStoreName" value="MR DIY Store" readonly>
+                            </div>
+                            <div style="height: 10px;"></div>
+                            <div class="input-group">
+                                <label>Prepare By</label>
+                                <input type="text" class="input-style" style="flex:1; background: #e0e0e0;" id="dispUserFull" readonly>
+                            </div>
                         </div>
-                        <div style="height: 30px;"></div>
-                        <div class="input-group">
-                            <label style="width: 70px;"># Item/Qty</label>
-                            <input type="text" class="input-style" style="width: 40px;" id="dispTotalItem" value="0" readonly>
-                            <input type="text" class="input-style" style="width: 40px;" id="dispTotalQty" value="0" readonly>
+                        
+                        <div class="panel-section" style="width: 220px;">
+                            <div class="input-group">
+                                <label style="width: 70px;">Doc.Date</label>
+                                <input type="text" class="input-style" style="width: 110px;" id="dispDate" readonly>
+                            </div>
+                            <div style="height: 30px;"></div>
+                            <div class="input-group">
+                                <label style="width: 70px;"># Item/Qty</label>
+                                <input type="text" class="input-style" style="width: 40px;" id="dispTotalItem" value="0" readonly>
+                                <input type="text" class="input-style" style="width: 40px;" id="dispTotalQty" value="0" readonly>
+                            </div>
                         </div>
-                        <div style="margin-top: 5px; font-size: 11px; border-top:1px solid #fff; padding-top:2px;">Special Instruction</div>
-                        <textarea class="input-style" style="height: 45px; resize:none;"></textarea>
+                    </div>
+
+                    <div class="entry-bar">
+                        <span>Enter Code Here</span>
+                        <input type="text" class="input-style" style="width: 140px;" readonly placeholder="Scanner input...">
+                        <span>Quantity</span>
+                        <input type="text" class="input-style" style="width: 60px;" readonly>
+                        <button class="btn-classic">Enter</button>
+                    </div>
+
+                    <div class="table-container">
+                        <table id="mainTable">
+                            <thead>
+                                <tr>
+                                    <th style="width: 35px;">#No.</th>
+                                    <th style="width: 120px;">Sku Code</th>
+                                    <th>Description</th>
+                                    <th style="width: 80px; text-align:center;">Qty System</th>
+                                    <th style="width: 80px; text-align:center;">Qty Fisik</th>
+                                    <th style="width: 80px; text-align:center;">Variance</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody">
+                                <tr><td colspan="6" style="text-align:center; color:#555; padding: 15px;">No records. Please upload data via Stock Take Preparation.</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 
-                <!-- Table Entry Bar -->
-                <div class="entry-bar">
-                    <span>Enter Code Here</span>
-                    <input type="text" class="input-style" style="width: 140px;" readonly placeholder="Scanner input...">
-                    <span>Quantity</span>
-                    <input type="text" class="input-style" style="width: 60px;" readonly>
-                    <button class="btn-classic">Enter</button>
-                </div>
-
-                <!-- Data Table -->
-                <div class="table-container">
-                    <table id="mainTable">
-                        <thead>
-                            <tr>
-                                <th style="width: 35px;">#No.</th>
-                                <th style="width: 120px;">Sku Code</th>
-                                <th>Description</th>
-                                <th style="width: 80px; text-align:center;">Qty System</th>
-                                <th style="width: 80px; text-align:center;">Qty Fisik</th>
-                                <th style="width: 80px; text-align:center;">Variance</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tableBody">
-                            <tr><td colspan="6" style="text-align:center; color:#555; padding: 15px;">No records. Please upload Main DB and Scan Data.</td></tr>
-                        </tbody>
-                    </table>
-                </div>
             </div>
 
             <!-- Right Sidebar -->
@@ -167,10 +189,7 @@
                 <div class="status-header">Status</div>
                 <div class="status-list">
                     <div class="status-item"><div class="status-icon" style="background:#55ff55;"></div> In Box</div>
-                    <div class="status-item"><div class="status-icon" style="background:#00a000;"></div> Hold</div>
                     <div class="status-item"><div class="status-icon" style="background:#00a000;"></div> Updated</div>
-                    <div class="status-item"><div class="status-icon" style="background:#00a000;"></div> Erased</div>
-                    <div class="status-item"><div class="status-icon" style="background:#00a000;"></div> Locked</div>
                     <div class="status-item"><div class="status-icon red"></div> <span style="color:white;">Close</span></div>
                 </div>
             </div>
@@ -178,7 +197,6 @@
         </div>
     </div>
 
-    <!-- Panggilan File JS (Sesuai folder 'js' Anda di GitHub) -->
     <script src="js/app.js"></script>
 </body>
 </html>
