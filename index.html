@@ -31,16 +31,18 @@
 <div class="container">
     <h1>Mini Stock Take System</h1>
 
+    <!-- SECTION LOGIN -->
     <div id="loginSection" class="section">
         <h2>Login Pengguna</h2>
         <div class="form-group">
             <label for="userIdInput">User ID</label>
-            <input type="text" id="userIdInput" placeholder="Masukkan User ID (Contoh: XGSS, XBDS)">
+            <input type="text" id="userIdInput" placeholder="Masukkan User ID (Contoh: XGSS, XBDS)" autofocus>
         </div>
-        <button id="btnLogin">Masuk</button>
-        <p id="loginError" style="color:red; display:none;">User ID tidak valid!</p>
+        <button id="btnLogin" type="button">Masuk</button>
+        <p id="loginError" style="color:red; display:none; margin-top: 10px; font-weight: bold;">User ID tidak ditemukan dalam sistem!</p>
     </div>
 
+    <!-- SECTION WORKSPACE -->
     <div id="workspaceSection" class="section hidden">
         <div class="header-info">
             <div><strong>Toko:</strong> <span id="displayStoreCode">-</span></div>
