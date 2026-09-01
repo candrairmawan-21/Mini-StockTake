@@ -12,15 +12,26 @@ const Config = {
 };
 
 const State = {
-    currentUser: null, currentStore: null, mainDatabase: {}, scanData: [], currentRack: "-",
+    currentUser: null, 
+    currentStore: null, 
+    mainDatabase: {}, 
     
-    // File references for explicit upload action
-    pendingMainFile: null, pendingScanFile: null,
+    // Multi-rack data structure: { "RACK-01": [ {sku, rack, qtyFisik} ], "RACK-02": [...] }
+    racksData: {}, 
+    rackList: [], 
+    currentRackIndex: 0,
+    
+    pendingMainFile: null, 
+    pendingScanFile: null,
 
     saveLocal: function() {
         localStorage.setItem('qubeStockTakeState', JSON.stringify({
-            currentUser: this.currentUser, currentStore: this.currentStore,
-            mainDatabase: this.mainDatabase, scanData: this.scanData, currentRack: this.currentRack
+            currentUser: this.currentUser, 
+            currentStore: this.currentStore,
+            mainDatabase: this.mainDatabase, 
+            racksData: this.racksData,
+            rackList: this.rackList,
+            currentRackIndex: this.currentRackIndex
         }));
     },
     loadLocal: function() {
@@ -28,16 +39,21 @@ const State = {
         if (saved) {
             try {
                 const data = JSON.parse(saved);
-                this.currentUser = data.currentUser || null; this.currentStore = data.currentStore || null;
-                this.mainDatabase = data.mainDatabase || {}; this.scanData = data.scanData || [];
-                this.currentRack = data.currentRack || "-"; return true;
+                this.currentUser = data.currentUser || null; 
+                this.currentStore = data.currentStore || null;
+                this.mainDatabase = data.mainDatabase || {}; 
+                this.racksData = data.racksData || {};
+                this.rackList = data.rackList || [];
+                this.currentRackIndex = data.currentRackIndex || 0; 
+                return true;
             } catch(e) { return false; }
         }
         return false;
     },
     clearLocal: function() {
         localStorage.removeItem('qubeStockTakeState');
-        this.currentUser = null; this.currentStore = null; this.mainDatabase = {}; this.scanData = []; this.currentRack = "-";
+        this.currentUser = null; this.currentStore = null; 
+        this.mainDatabase = {}; this.racksData = {}; this.rackList = []; this.currentRackIndex = 0;
     }
 };
 
@@ -60,17 +76,20 @@ const FileProcessor = {
                 }
                 State.mainDatabase = db;
             } else {
-                const scanResult = [];
-                let detectedRack = "-";
+                const groupedRacks = {};
                 for (let i = 0; i < rows.length; i++) {
                     const row = rows[i];
                     if (row.length >= 3 && row[1]) {
-                        if (detectedRack === "-") detectedRack = String(row[2]).trim();
-                        scanResult.push({ sku: String(row[1]).trim(), rack: String(row[2]).trim(), qtyFisik: "" });
+                        const sku = String(row[1]).trim();
+                        const rack = String(row[2]).trim();
+                        
+                        if (!groupedRacks[rack]) groupedRacks[rack] = [];
+                        groupedRacks[rack].push({ sku: sku, rack: rack, qtyFisik: "" });
                     }
                 }
-                State.scanData = scanResult;
-                State.currentRack = detectedRack;
+                State.racksData = groupedRacks;
+                State.rackList = Object.keys(groupedRacks);
+                State.currentRackIndex = 0;
             }
             State.saveLocal();
             callback();
@@ -92,9 +111,7 @@ const UI = {
             document.getElementById('loginSection').classList.add('hidden');
             document.getElementById('workspaceSection').classList.remove('hidden');
             
-            // Format Prepare By: ID-[Store Code]-[Store Name] (Using UserID as store name identifier based on setup)
             const prepareByString = `ID-${State.currentStore}-MRDIY`;
-            
             document.getElementById('dispStoreCode').value = State.currentStore;
             document.getElementById('dispUserFull').value = prepareByString;
             document.getElementById('sysTitleName').innerText = "MR DIY - " + State.currentStore;
@@ -116,6 +133,8 @@ const UI = {
         document.getElementById(targetId).classList.add('active-panel');
         document.querySelector(`[data-target="${targetId}"]`).classList.add('active');
         document.getElementById('panelHeaderTitle').innerText = title;
+        
+        if(targetId === 'panel-entry') this.renderTable();
     },
     setupDragAndDrop: function(dropZoneId, inputId, infoId, btnId, type) {
         const dropZone = document.getElementById(dropZoneId);
@@ -144,38 +163,37 @@ const UI = {
             if(type === 'scan') State.pendingScanFile = file;
         }
     },
-    simulateUpload: function(file, isMainDb, progBarId, progContId, statusId, btnId) {
-        document.getElementById(btnId).classList.add('hidden');
-        document.getElementById(progContId).classList.remove('hidden');
+    processUpload: function(file, isMainDb, progBarId, progContId, statusId, btnId) {
+        const btn = document.getElementById(btnId);
+        const progCont = document.getElementById(progContId);
         const progBar = document.getElementById(progBarId);
         const status = document.getElementById(statusId);
         
-        let progress = 0;
+        btn.disabled = true;
+        progCont.classList.remove('hidden');
+        progBar.style.width = "50%";
+        progBar.innerText = "50%";
         status.innerText = "Processing Data...";
         status.style.color = "#0000aa";
         
-        const interval = setInterval(() => {
-            progress += 20;
-            progBar.style.width = progress + "%";
-            progBar.innerText = progress + "%";
-            
-            if (progress >= 100) {
-                clearInterval(interval);
-                FileProcessor.processFile(file, isMainDb, () => {
-                    status.innerText = "✅ Upload Successful!";
-                    status.style.color = "green";
-                    UI.renderTable();
-                });
-            }
-        }, 150);
+        setTimeout(() => {
+            FileProcessor.processFile(file, isMainDb, () => {
+                progBar.style.width = "100%";
+                progBar.innerText = "100%";
+                status.innerText = "✅ Upload & Parsing Successful!";
+                status.style.color = "green";
+                btn.disabled = false;
+                UI.renderTable();
+            });
+        }, 300);
     },
     updateUploadStatus: function() {
         if(Object.keys(State.mainDatabase).length > 0) {
-            document.getElementById('statusMain').innerText = "✅ Master DB is already loaded in memory.";
+            document.getElementById('statusMain').innerText = "✅ Master DB is loaded in memory.";
             document.getElementById('statusMain').style.color = "green";
         }
-        if(State.scanData.length > 0) {
-            document.getElementById('statusScan').innerText = `✅ Scan Data Loaded (Rack: ${State.currentRack})`;
+        if(State.rackList.length > 0) {
+            document.getElementById('statusScan').innerText = `✅ Scan Data Loaded (${State.rackList.length} Racks Found)`;
             document.getElementById('statusScan').style.color = "green";
         }
     },
@@ -183,17 +201,24 @@ const UI = {
         const tbody = document.getElementById('tableBody');
         tbody.innerHTML = '';
         
-        document.getElementById('dispRack').value = State.currentRack;
-        document.getElementById('dispTotalItem').value = State.scanData.length;
-
-        if (State.scanData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#555; padding: 15px;">No records. Please upload data via Stock Take Preparation.</td></tr>';
+        if (State.rackList.length === 0) {
+            document.getElementById('dispRack').value = "-";
+            document.getElementById('dispRackCount').innerText = "(0/0)";
+            document.getElementById('dispTotalItem').value = 0;
             document.getElementById('dispTotalQty').value = 0;
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#555; padding: 15px;">No records. Please upload data via Stock Take Preparation.</td></tr>';
             return;
         }
 
+        const currentRackName = State.rackList[State.currentRackIndex];
+        const currentRackItems = State.racksData[currentRackName] || [];
+
+        document.getElementById('dispRack').value = currentRackName;
+        document.getElementById('dispRackCount').innerText = `(${State.currentRackIndex + 1}/${State.rackList.length})`;
+        document.getElementById('dispTotalItem').value = currentRackItems.length;
+
         let totalFisik = 0;
-        State.scanData.forEach((item, index) => {
+        currentRackItems.forEach((item, index) => {
             const dbInfo = State.mainDatabase[item.sku] || { qtySystem: 0, description: "UNKNOWN SKU" };
             let varianceTxt = ""; let varClass = ""; let fisikVal = item.qtyFisik;
             
@@ -226,7 +251,11 @@ const UI = {
         const index = e.target.getAttribute('data-index');
         let val = e.target.value;
         if(val !== "" && val < 0) { e.target.value = 0; val = 0; }
-        State.scanData[index].qtyFisik = val; State.saveLocal();
+        
+        const currentRackName = State.rackList[State.currentRackIndex];
+        State.racksData[currentRackName][index].qtyFisik = val; 
+        State.saveLocal();
+        
         UI.renderTable(); 
         const inputs = document.querySelectorAll('.qty-input');
         if(inputs[index]) inputs[index].focus();
@@ -251,40 +280,61 @@ const App = {
         UI.setupDragAndDrop('dropZoneMain', 'mainDbFile', 'infoMainFile', 'btnUploadMain', 'main');
         UI.setupDragAndDrop('dropZoneScan', 'scanFile', 'infoScanFile', 'btnUploadScan', 'scan');
 
-        // 3. Upload Buttons Processing
+        // 3. Upload Buttons Action
         document.getElementById('btnUploadMain').addEventListener('click', () => {
-            if(State.pendingMainFile) UI.simulateUpload(State.pendingMainFile, true, 'progBarMain', 'progContainerMain', 'statusMain', 'btnUploadMain');
+            if(State.pendingMainFile) UI.processUpload(State.pendingMainFile, true, 'progBarMain', 'progContainerMain', 'statusMain', 'btnUploadMain');
         });
         document.getElementById('btnUploadScan').addEventListener('click', () => {
             if(Object.keys(State.mainDatabase).length === 0) { alert("Error: Please upload Master DB first."); return; }
-            if(State.pendingScanFile) UI.simulateUpload(State.pendingScanFile, false, 'progBarScan', 'progContainerScan', 'statusScan', 'btnUploadScan');
+            if(State.pendingScanFile) UI.processUpload(State.pendingScanFile, false, 'progBarScan', 'progContainerScan', 'statusScan', 'btnUploadScan');
         });
 
-        // 4. Login & Logout
+        // 4. Rack Navigation Buttons (Prev/Next)
+        document.getElementById('btnPrevRack').addEventListener('click', () => {
+            if (State.currentRackIndex > 0) {
+                State.currentRackIndex--;
+                State.saveLocal();
+                UI.renderTable();
+            }
+        });
+
+        document.getElementById('btnNextRack').addEventListener('click', () => {
+            if (State.currentRackIndex < State.rackList.length - 1) {
+                State.currentRackIndex++;
+                State.saveLocal();
+                UI.renderTable();
+            }
+        });
+
+        // 5. Login & Logout
         document.getElementById('btnLogin').addEventListener('click', App.handleLogin);
         document.getElementById('userIdInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') App.handleLogin(); });
         document.getElementById('btnLogout').addEventListener('click', () => {
             if(confirm("Exit Application? Unsaved data will be lost.")) { State.clearLocal(); UI.initLoginState(); }
         });
 
-        // 5. Cloud Save & PDF
+        // 6. Cloud Save & PDF
         document.getElementById('btnDownloadPDF').addEventListener('click', () => {
-            if(State.scanData.length === 0) { alert("No data to export."); return; }
+            if(State.rackList.length === 0) { alert("No data to export."); return; }
+            const currentRackName = State.rackList[State.currentRackIndex];
             const { jsPDF } = window.jspdf; const doc = new jsPDF();
-            doc.setFontSize(14); doc.text(`Stock Take Report - Rack: ${State.currentRack}`, 14, 15);
+            doc.setFontSize(14); doc.text(`Stock Take Report - Rack: ${currentRackName}`, 14, 15);
             doc.setFontSize(10); doc.text(`Store: ${State.currentStore} | User: ${State.currentUser} | Date: ${document.getElementById('dispDate').value}`, 14, 22);
             doc.autoTable({ html: '#mainTable', startY: 28, theme: 'grid', headStyles: { fillColor: [0, 0, 170] } });
-            doc.save(`StockTake_${State.currentStore}_${State.currentRack}.pdf`);
+            doc.save(`StockTake_${State.currentStore}_${currentRackName}.pdf`);
         });
 
         document.getElementById('btnSaveToCloud').addEventListener('click', async () => {
-            if(State.scanData.length === 0) return;
-            if(State.scanData.some(item => item.qtyFisik === "") && !confirm("Empty Physical Quantities exist. Proceed saving?")) return;
+            if(State.rackList.length === 0) return;
+            const currentRackName = State.rackList[State.currentRackIndex];
+            const currentRackItems = State.racksData[currentRackName] || [];
+
+            if(currentRackItems.some(item => item.qtyFisik === "") && !confirm("Empty Physical Quantities exist. Proceed saving?")) return;
             const btn = document.getElementById('btnSaveToCloud'); btn.innerText = "Processing..."; btn.disabled = true;
 
             const payload = {
-                userId: State.currentUser, storeCode: State.currentStore, rackNumber: State.currentRack,
-                data: State.scanData.map(item => {
+                userId: State.currentUser, storeCode: State.currentStore, rackNumber: currentRackName,
+                data: currentRackItems.map(item => {
                     const dbInfo = State.mainDatabase[item.sku] || { qtySystem: 0, description: "" };
                     const fisik = item.qtyFisik === "" ? 0 : parseInt(item.qtyFisik);
                     return { sku: item.sku, description: dbInfo.description, qtySystem: dbInfo.qtySystem, qtyFisik: fisik, variance: fisik - dbInfo.qtySystem }
@@ -293,8 +343,7 @@ const App = {
 
             try {
                 await fetch(Config.GOOGLE_SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                alert(`Data for Rack ${State.currentRack} has been saved.`);
-                State.scanData = []; State.currentRack = "-"; State.saveLocal(); UI.renderTable();
+                alert(`Data for Rack ${currentRackName} has been saved to Cloud Spreadsheet.`);
             } catch (error) { alert("Connection Error."); } 
             finally { btn.innerText = "💾 Update & Save Data"; btn.disabled = false; }
         });
