@@ -1,99 +1,264 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mini Stock Take</title>
+    <title>Qube Back End System - [Stock Take]</title>
+    <!-- Library untuk membaca Excel, CSV, TXT -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <!-- Library untuk PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; color: #333; margin: 0; padding: 20px; }
-        .container { max-width: 1000px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        /* Gaya UI Klasik ala Windows XP / VB6 */
+        body { font-family: 'Tahoma', 'MS Sans Serif', sans-serif; background-color: #d4d0c8; color: #000; margin: 0; padding: 0; font-size: 11px; overflow-x: hidden; }
         .hidden { display: none !important; }
-        .section { margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 6px; }
-        h1, h2, h3 { margin-top: 0; color: #2c3e50; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input[type="text"], input[type="file"], select { width: 100%; padding: 8px; box-sizing: border-box; }
-        button { background-color: #3498db; color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 4px; font-weight: bold; }
-        button:hover { background-color: #2980b9; }
-        .btn-success { background-color: #2ecc71; }
-        .btn-success:hover { background-color: #27ae60; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-        th { background-color: #f8f9fa; }
-        input.qty-input { width: 80px; padding: 5px; text-align: center; }
-        .variance-negative { color: red; font-weight: bold; }
-        .variance-positive { color: green; font-weight: bold; }
-        .header-info { display: flex; justify-content: space-between; background: #e8f4f8; padding: 10px; border-radius: 4px; margin-bottom: 15px; }
+        input, select, button { font-family: 'Tahoma', 'MS Sans Serif', sans-serif; font-size: 11px; }
+        
+        /* Modal Login */
+        #loginSection { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #d4d0c8; border: 2px outset #fff; padding: 2px; width: 300px; z-index: 1000; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); }
+        .window-header { background: #0000aa; color: white; padding: 3px 5px; font-weight: bold; display: flex; justify-content: space-between; }
+        .window-body { padding: 15px; border: 2px inset #fff; margin-top: 2px; background: #d4d0c8; }
+        .btn-classic { background: #d4d0c8; border: 2px outset #fff; padding: 4px 10px; cursor: pointer; }
+        .btn-classic:active { border-style: inset; }
+
+        /* Struktur Utama Qube System */
+        #workspaceSection { display: flex; flex-direction: column; height: 100vh; }
+        
+        /* Top Bar & Menu */
+        .top-bar { background: #fff; padding: 2px; border-bottom: 1px solid #888; }
+        .menu-bar { display: flex; gap: 15px; padding: 2px 5px; color: #000; font-size: 11px; }
+        .menu-bar span { cursor: default; }
+        .blue-title-bar { background: #0000aa; color: white; padding: 2px 5px; font-weight: bold; display: flex; align-items: center; gap: 10px; }
+        
+        /* Toolbar Buatan untuk Integrasi Fitur App */
+        .toolbar { background: #d4d0c8; padding: 4px; border-bottom: 1px solid #888; display: flex; gap: 5px; align-items: center; }
+        .toolbar button { background: #d4d0c8; border: 1px solid transparent; padding: 2px 5px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+        .toolbar button:hover { border: 1px outset #fff; }
+        .toolbar button:active { border: 1px inset #fff; }
+        .file-upload-wrapper { position: relative; overflow: hidden; display: inline-block; }
+        .file-upload-wrapper input[type=file] { font-size: 100px; position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; }
+
+        /* Layout Grid */
+        .main-layout { display: flex; flex-grow: 1; overflow: hidden; }
+        
+        /* Left Sidebar */
+        .left-sidebar { width: 180px; background: #e8e8e8; border-right: 2px solid #888; display: flex; flex-direction: column; }
+        .sidebar-title { background: #a0a0a0; color: white; padding: 4px 8px; font-weight: bold; font-size: 12px; }
+        .sidebar-list { padding: 10px; flex-grow: 1; background: #fff; border-bottom: 2px solid #d4d0c8; }
+        .sidebar-item { display: flex; align-items: center; gap: 5px; padding: 2px 0; cursor: pointer; color: #333; }
+        .sidebar-accordion { background: #d4d0c8; }
+        .accordion-btn { display: block; width: 100%; text-align: left; background: #d4d0c8; border: 1px solid #fff; border-bottom: 1px solid #888; border-right: 1px solid #888; padding: 4px 10px; font-weight: bold; cursor: pointer; }
+        .accordion-btn.active { background: #c0c0c0; }
+
+        /* Center Content */
+        .center-content { flex-grow: 1; display: flex; flex-direction: column; background: #fff; overflow: auto; }
+        .stock-take-header { background: #3b88d8; color: white; padding: 5px 10px; font-size: 16px; font-weight: bold; border-bottom: 2px solid #fff; }
+        
+        /* Blue Data Panel */
+        .blue-panel { background: #8bc3ff; border-bottom: 2px solid #fff; display: flex; padding: 10px; gap: 15px; }
+        .panel-section { border: 1px solid #fff; padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+        .input-group { display: flex; align-items: center; gap: 5px; }
+        .input-group label { width: 70px; }
+        .input-style { border: 2px inset #fff; background: #fff; padding: 2px 4px; }
+        .input-green { background: #55ff55; border: 1px solid #000; padding: 2px; width: 80px; font-weight: bold; }
+        
+        /* Data Entry Bar */
+        .entry-bar { background: #d4d0c8; padding: 5px 10px; border-bottom: 1px solid #888; display: flex; align-items: center; gap: 10px; }
+        
+        /* Table */
+        .table-container { flex-grow: 1; background: #d4d0c8; padding: 2px; }
+        table { width: 100%; border-collapse: collapse; background: #fff; }
+        th { background: #d4d0c8; border: 1px outset #fff; padding: 4px; text-align: left; font-weight: normal; }
+        td { border: 1px solid #ccc; padding: 4px; }
+        .qty-input { width: 50px; border: 1px solid #888; text-align: right; }
+        .row-selected { background: #e0e0e0; }
+
+        /* Right Sidebar (Status) */
+        .right-sidebar { width: 80px; background: #006600; color: white; border-left: 2px inset #fff; display: flex; flex-direction: column; }
+        .status-header { background: #e0e0e0; color: #000; padding: 2px; text-align: center; font-weight: bold; border-bottom: 1px solid #888; }
+        .status-list { padding: 10px 5px; display: flex; flex-direction: column; gap: 8px; }
+        .status-item { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+        .status-icon { width: 10px; height: 10px; border: 1px solid #fff; background: #00a000; }
+        .status-icon.red { background: red; border-radius: 50%; }
+        
+        /* Utility */
+        .var-neg { color: red; font-weight: bold; }
+        .var-pos { color: green; font-weight: bold; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>Mini Stock Take System</h1>
-
-    <!-- SECTION LOGIN -->
-    <div id="loginSection" class="section">
-        <h2>Login Pengguna</h2>
-        <div class="form-group">
-            <label for="userIdInput">User ID</label>
-            <input type="text" id="userIdInput" placeholder="Masukkan User ID (Contoh: XGSS, XBDS)" autofocus>
+    <!-- MODAL LOGIN -->
+    <div id="loginSection">
+        <div class="window-header">
+            <span>System Login</span>
+            <span style="cursor:pointer; border:1px outset #fff; padding: 0 4px; background:#d4d0c8; color:black;">X</span>
         </div>
-        <button id="btnLogin" type="button">Masuk</button>
-        <p id="loginError" style="color:red; display:none; margin-top: 10px; font-weight: bold;">User ID tidak ditemukan dalam sistem!</p>
+        <div class="window-body">
+            <div style="margin-bottom: 10px;">
+                <label style="display:block; margin-bottom:5px;">User ID:</label>
+                <input type="text" id="userIdInput" class="input-style" style="width:100%;" autofocus>
+            </div>
+            <div style="text-align: right;">
+                <button id="btnLogin" class="btn-classic">Login</button>
+            </div>
+            <p id="loginError" style="color:red; display:none; margin-top:5px;">ID Not Found</p>
+        </div>
     </div>
 
-    <!-- SECTION WORKSPACE -->
-    <div id="workspaceSection" class="section hidden">
-        <div class="header-info">
-            <div><strong>Toko:</strong> <span id="displayStoreCode">-</span></div>
-            <div><strong>User ID:</strong> <span id="displayUserId">-</span></div>
-            <button id="btnLogout" style="padding: 5px 10px; background-color: #e74c3c;">Logout</button>
+    <!-- MAIN WORKSPACE -->
+    <div id="workspaceSection" class="hidden">
+        
+        <!-- Header & Menus -->
+        <div class="top-bar">
+            <div style="padding: 2px 5px; font-weight:bold;">Qube Back End System 20.106.5.0 ENU - [Stock Take]</div>
+            <div class="menu-bar">
+                <span><u>N</u>avigator</span> <span><u>V</u>iew</span> <span><u>T</u>ools</span> <span><u>P</u>rocess</span> <span><u>S</u>tore</span>
+            </div>
         </div>
-
-        <h3>1. Persiapan Data</h3>
-        <div class="form-group">
-            <label for="mainDbFile">Upload Database Utama (.txt)</label>
-            <input type="file" id="mainDbFile" accept=".txt">
-        </div>
-        <div class="form-group">
-            <label for="scanFile">Upload Data Scan (.txt / .csv)</label>
-            <input type="file" id="scanFile" accept=".txt,.csv">
+        <div class="blue-title-bar">
+            <input type="checkbox" id="hideMenu" style="margin:0;"> <label for="hideMenu">Hide Menu</label>
+            <span style="margin-left: 20px;" id="sysTitleName">PT. NIAGA INDOGUNA YASA</span>
         </div>
         
-        <div id="rackInfo" class="header-info hidden" style="background: #fff3cd; margin-top: 20px;">
-            <div style="font-size: 1.2em;"><strong>Rack Number:</strong> <span id="displayRack">-</span></div>
+        <!-- Toolbar App Integration -->
+        <div class="toolbar">
+            <div class="file-upload-wrapper">
+                <button title="Upload Database Utama (TXT/CSV/XLSX)">📁 <u>1</u>. Upload Master DB</button>
+                <input type="file" id="mainDbFile" accept=".txt,.csv,.xls,.xlsx">
+            </div>
+            <div class="file-upload-wrapper">
+                <button title="Upload Data Scan Scanner">📠 <u>2</u>. Upload Scan Data</button>
+                <input type="file" id="scanFile" accept=".txt,.csv,.xls,.xlsx">
+            </div>
+            <div style="border-left: 1px solid #888; height: 16px; margin: 0 5px;"></div>
+            <button id="btnDownloadPDF" title="Export to PDF">📄 Download Stock Sheet</button>
+            <button id="btnSaveToCloud" title="Save to Google Sheets">💾 Update & Save Data</button>
+            <button id="btnLogout" title="Logout System" style="margin-left: auto;">🚪 Exit</button>
         </div>
 
-        <h3>2. Tabel Pengecekan Fisik</h3>
-        <table id="stockTable">
-            <thead>
-                <tr>
-                    <th>No</th>
-                    <th>SKU Code</th>
-                    <th>Description</th>
-                    <th>Qty System</th>
-                    <th>Qty Fisik</th>
-                    <th>Variance</th>
-                </tr>
-            </thead>
-            <tbody id="tableBody">
-                <tr><td colspan="6" style="text-align:center;">Belum ada data diunggah</td></tr>
-            </tbody>
-        </table>
+        <div class="main-layout">
+            
+            <!-- Left Navigation -->
+            <div class="left-sidebar">
+                <div class="sidebar-title">Inventory</div>
+                <div class="sidebar-list">
+                    <div class="sidebar-item">🗂️ Stock Take Preparation</div>
+                    <div class="sidebar-item" style="background:#e0e0e0;">📂 Stock Take Entry</div>
+                </div>
+                <div class="sidebar-accordion">
+                    <button class="accordion-btn">Store</button>
+                    <button class="accordion-btn">Security</button>
+                    <button class="accordion-btn">POS Settings</button>
+                    <button class="accordion-btn">Maintenance</button>
+                    <button class="accordion-btn">Stock AR</button>
+                    <button class="accordion-btn">Stock AP</button>
+                    <button class="accordion-btn active">Inventory</button>
+                    <button class="accordion-btn">Reporting</button>
+                    <button class="accordion-btn">TMS</button>
+                </div>
+            </div>
 
-        <div style="margin-top: 20px; text-align: right;">
-            <button id="btnSaveToCloud" class="btn-success hidden">Simpan ke Spreadsheet</button>
+            <!-- Center Panel -->
+            <div class="center-content">
+                <div class="stock-take-header">STOCK TAKE</div>
+                
+                <!-- Info Panel -->
+                <div class="blue-panel">
+                    <div class="panel-section" style="flex: 1;">
+                        <div class="input-group">
+                            <label>Ref.No.</label>
+                            <input type="text" class="input-style" style="width: 20px;" value="P" readonly>
+                            <div class="input-green" id="dispRefNo">0000000000</div>
+                        </div>
+                        <div style="height: 10px;"></div>
+                        <div class="input-group">
+                            <label>Process At</label>
+                            <input type="text" class="input-style" style="width: 50px;" id="dispRack" value="-" readonly>
+                            <input type="text" class="input-style" style="flex:1;" readonly>
+                        </div>
+                        <div class="input-group">
+                            <label>Store</label>
+                            <input type="text" class="input-style" style="width: 50px;" id="dispStore" readonly>
+                            <input type="text" class="input-style" style="flex:1;" value="PT Niaga Indoguna Yasa" readonly>
+                        </div>
+                        <div style="height: 10px;"></div>
+                        <div class="input-group">
+                            <label>Prepare By</label>
+                            <input type="text" class="input-style" style="width: 50px;" id="dispUser" readonly>
+                            <input type="text" class="input-style" style="flex:1;" id="dispUserFull" readonly>
+                        </div>
+                    </div>
+                    
+                    <div class="panel-section" style="width: 200px;">
+                        <div class="input-group">
+                            <label style="width: 60px;">Doc.Date</label>
+                            <input type="text" class="input-style" style="width: 100px;" id="dispDate" readonly>
+                        </div>
+                        <div style="height: 30px;"></div>
+                        <div class="input-group">
+                            <label style="width: 60px;"># Item/Qty</label>
+                            <input type="text" class="input-style" style="width: 30px;" id="dispTotalItem" value="0" readonly>
+                            <input type="text" class="input-style" style="width: 30px;" id="dispTotalQty" value="0" readonly>
+                        </div>
+                        <div style="margin-top: 5px; font-size: 10px; border-top:1px solid #fff; padding-top:2px;">Special Instruction</div>
+                        <textarea class="input-style" style="height: 40px; resize:none;"></textarea>
+                    </div>
+                </div>
+
+                <!-- Table Entry Bar -->
+                <div class="entry-bar">
+                    <span>Enter Code Here</span>
+                    <input type="text" class="input-style" style="width: 120px;" readonly placeholder="Scanner input...">
+                    <span>Quantity</span>
+                    <input type="text" class="input-style" style="width: 50px;" readonly>
+                    <button class="btn-classic">Enter</button>
+                </div>
+
+                <!-- Data Table -->
+                <div class="table-container">
+                    <table id="mainTable">
+                        <thead>
+                            <tr>
+                                <th style="width: 25px;">#No.</th>
+                                <th style="width: 100px;">Sku Code</th>
+                                <th>Description</th>
+                                <th style="width: 70px; text-align:center;">Qty System</th>
+                                <th style="width: 70px; text-align:center;">Qty Fisik</th>
+                                <th style="width: 70px; text-align:center;">Variance</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                            <tr><td colspan="6" style="text-align:center; color:#555;">No records. Please upload Main DB and Scan Data.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Right Sidebar -->
+            <div class="right-sidebar">
+                <div class="status-header">Status</div>
+                <div class="status-list">
+                    <div class="status-item"><div class="status-icon" style="background:#55ff55;"></div> In Box</div>
+                    <div class="status-item"><div class="status-icon" style="background:#00a000;"></div> Hold</div>
+                    <div class="status-item"><div class="status-icon" style="background:#00a000;"></div> Updated</div>
+                    <div class="status-item"><div class="status-icon" style="background:#00a000;"></div> Erased</div>
+                    <div class="status-item"><div class="status-icon" style="background:#00a000;"></div> Locked</div>
+                    <div class="status-item"><div class="status-icon red"></div> <span style="color:white;">Close</span></div>
+                </div>
+            </div>
+
         </div>
     </div>
-</div>
 
 <script>
 /**
- * KONFIGURASI SISTEM & MAPPING USER
+ * Konfigurasi API
  */
 const Config = {
     GOOGLE_SCRIPT_URL: "https://script.google.com/macros/s/AKfycbwBnHSNiuboFv2KujFfqHBfxWvk3xJpkuAqqNnu4zSLDiEMu-YDSBSG5ERakchme9Tr/exec", 
-    
     UserMapping: {
         "XGSS": "JC2017", "XBDS": "JC8001", "XWGN": "JC2021", "XPRC": "JC1029",
         "XRES": "JC1020", "XWDR": "JC3001", "SLGD": "JC2001", "EPPKA": "JC2008",
@@ -106,332 +271,276 @@ const Config = {
 };
 
 /**
- * STATE MANAGEMENT
+ * State Management
  */
 const State = {
-    currentUser: null,
-    currentStore: null,
-    mainDatabase: {}, 
-    scanData: [],     
-    currentRack: "-",
-
+    currentUser: null, currentStore: null, mainDatabase: {}, scanData: [], currentRack: "-",
     saveLocal: function() {
-        const data = {
-            currentUser: this.currentUser,
-            currentStore: this.currentStore,
-            mainDatabase: this.mainDatabase,
-            scanData: this.scanData,
-            currentRack: this.currentRack
-        };
-        localStorage.setItem('miniStockTakeState', JSON.stringify(data));
+        localStorage.setItem('qubeStockTakeState', JSON.stringify({
+            currentUser: this.currentUser, currentStore: this.currentStore,
+            mainDatabase: this.mainDatabase, scanData: this.scanData, currentRack: this.currentRack
+        }));
     },
-
     loadLocal: function() {
-        const saved = localStorage.getItem('miniStockTakeState');
+        const saved = localStorage.getItem('qubeStockTakeState');
         if (saved) {
             try {
                 const data = JSON.parse(saved);
-                this.currentUser = data.currentUser || null;
-                this.currentStore = data.currentStore || null;
-                this.mainDatabase = data.mainDatabase || {};
-                this.scanData = data.scanData || [];
-                this.currentRack = data.currentRack || "-";
-                return true;
-            } catch(e) {
-                return false;
-            }
+                this.currentUser = data.currentUser || null; this.currentStore = data.currentStore || null;
+                this.mainDatabase = data.mainDatabase || {}; this.scanData = data.scanData || [];
+                this.currentRack = data.currentRack || "-"; return true;
+            } catch(e) { return false; }
         }
         return false;
     },
-
     clearLocal: function() {
-        localStorage.removeItem('miniStockTakeState');
-        this.currentUser = null;
-        this.currentStore = null;
-        this.mainDatabase = {};
-        this.scanData = [];
-        this.currentRack = "-";
+        localStorage.removeItem('qubeStockTakeState');
+        this.currentUser = null; this.currentStore = null; this.mainDatabase = {}; this.scanData = []; this.currentRack = "-";
     }
 };
 
 /**
- * FILE PARSER LOGIC
+ * Parser Engine Menggunakan SheetJS untuk (TXT, CSV, XLS, XLSX)
  */
-const Parser = {
-    parseMainDb: function(csvText) {
-        const lines = csvText.split(/\r?\n/);
-        const db = {};
-        
-        for (let i = 1; i < lines.length; i++) {
-            if (!lines[i].trim()) continue;
+const FileProcessor = {
+    processFile: function(file, isMainDb, callback) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const data = new Uint8Array(e.target.result);
+            // SheetJS membaca buffer (otomatis deteksi format Excel/CSV/TXT delim)
+            const workbook = XLSX.read(data, {type: 'array'});
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            // defval memastikan index kolom tetap terjaga meski cell kosong
+            const rows = XLSX.utils.sheet_to_json(firstSheet, {header: 1, defval: ""}); 
             
-            const cols = lines[i].split(',');
-            if (cols.length >= 9) {
-                const sku = cols[0].trim();
-                const qtySystem = parseInt(cols[3].trim()) || 0;
-                const description = cols[8].trim();
-
-                db[sku] = {
-                    qtySystem: qtySystem,
-                    description: description
-                };
+            if (isMainDb) {
+                const db = {};
+                // Asumsi baris 1 header, mulai i = 1
+                for (let i = 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    if (row.length >= 9 && row[0]) {
+                        db[String(row[0]).trim()] = {
+                            qtySystem: parseInt(row[3]) || 0,
+                            description: String(row[8]).trim()
+                        };
+                    }
+                }
+                State.mainDatabase = db;
+            } else {
+                const scanResult = [];
+                let detectedRack = "-";
+                // Asumsi file scan tidak selalu ada header formal, baca semua baris
+                for (let i = 0; i < rows.length; i++) {
+                    const row = rows[i];
+                    if (row.length >= 3 && row[1]) {
+                        if (detectedRack === "-") detectedRack = String(row[2]).trim();
+                        scanResult.push({
+                            sku: String(row[1]).trim(),
+                            rack: String(row[2]).trim(),
+                            qtyFisik: ""
+                        });
+                    }
+                }
+                State.scanData = scanResult;
+                State.currentRack = detectedRack;
             }
-        }
-        return db;
-    },
-
-    parseScanData: function(text) {
-        const lines = text.split(/\r?\n/);
-        const scanResult = [];
-        let detectedRack = "-";
-
-        for (let i = 0; i < lines.length; i++) {
-            if (!lines[i].trim()) continue;
-            
-            const delimiter = lines[i].includes('\t') ? '\t' : ',';
-            const cols = lines[i].split(delimiter);
-            
-            if (cols.length >= 3) {
-                const sku = cols[1].trim(); 
-                const rack = cols[2].trim(); 
-                
-                if (detectedRack === "-") detectedRack = rack;
-
-                scanResult.push({
-                    sku: sku,
-                    rack: rack,
-                    qtyFisik: "" 
-                });
-            }
-        }
-        return { data: scanResult, rack: detectedRack };
+            State.saveLocal();
+            callback();
+        };
+        reader.readAsArrayBuffer(file);
     }
 };
 
 /**
- * UI CONTROLLER
+ * UI Controller
  */
 const UI = {
+    updateDate: function() {
+        const today = new Date();
+        const dd = String(today.getDate()).padStart(2, '0');
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const yyyy = today.getFullYear();
+        document.getElementById('dispDate').value = `${dd}/${mm}/${yyyy}`;
+    },
     initLoginState: function() {
-        const loginSec = document.getElementById('loginSection');
-        const workSec = document.getElementById('workspaceSection');
-        
         if (State.currentUser) {
-            loginSec.classList.add('hidden');
-            workSec.classList.remove('hidden');
-            document.getElementById('displayUserId').innerText = State.currentUser;
-            document.getElementById('displayStoreCode').innerText = State.currentStore;
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('workspaceSection').classList.remove('hidden');
+            
+            document.getElementById('dispUser').value = State.currentUser;
+            document.getElementById('dispUserFull').value = "ID-BM-" + State.currentUser;
+            document.getElementById('dispStore').value = State.currentStore;
+            document.getElementById('sysTitleName').innerText = "PT. NIAGA INDOGUNA YASA - " + State.currentStore + "-" + State.currentUser;
+            
+            // Random Ref No for realism
+            document.getElementById('dispRefNo').innerText = Math.floor(100000000 + Math.random() * 900000000);
+            this.updateDate();
             this.renderTable();
         } else {
-            loginSec.classList.remove('hidden');
-            workSec.classList.add('hidden');
+            document.getElementById('loginSection').classList.remove('hidden');
+            document.getElementById('workspaceSection').classList.add('hidden');
         }
     },
-
     renderTable: function() {
         const tbody = document.getElementById('tableBody');
-        const rackInfo = document.getElementById('rackInfo');
-        const btnSave = document.getElementById('btnSaveToCloud');
-        
         tbody.innerHTML = '';
+        
+        document.getElementById('dispRack').value = State.currentRack;
+        document.getElementById('dispTotalItem').value = State.scanData.length;
 
         if (State.scanData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Belum ada data pemindaian</td></tr>';
-            rackInfo.classList.add('hidden');
-            btnSave.classList.add('hidden');
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#555;">No records.</td></tr>';
+            document.getElementById('dispTotalQty').value = 0;
             return;
         }
 
-        document.getElementById('displayRack').innerText = State.currentRack;
-        rackInfo.classList.remove('hidden');
-        btnSave.classList.remove('hidden');
-
+        let totalFisik = 0;
         State.scanData.forEach((item, index) => {
-            const dbInfo = State.mainDatabase[item.sku] || { qtySystem: 0, description: "SKU NOT FOUND IN DB" };
-            const sysQty = dbInfo.qtySystem;
-            const fisikQty = item.qtyFisik !== "" ? item.qtyFisik : "";
+            const dbInfo = State.mainDatabase[item.sku] || { qtySystem: 0, description: "UNKNOWN SKU" };
+            let varianceTxt = "";
+            let varClass = "";
+            let fisikVal = item.qtyFisik;
             
-            let varianceTxt = "-";
-            let varianceClass = "";
-            if (fisikQty !== "") {
-                const variance = parseInt(fisikQty) - sysQty;
+            if (fisikVal !== "") {
+                totalFisik += parseInt(fisikVal);
+                const variance = parseInt(fisikVal) - dbInfo.qtySystem;
                 varianceTxt = variance;
-                if (variance < 0) varianceClass = "variance-negative";
-                if (variance > 0) varianceClass = "variance-positive";
+                if(variance < 0) varClass = "var-neg";
+                if(variance > 0) varClass = "var-pos";
             }
 
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td>${index + 1}</td>
+                <td style="text-align:right;">▶ ${index + 1}</td>
                 <td>${item.sku}</td>
                 <td>${dbInfo.description}</td>
-                <td>${sysQty}</td>
-                <td><input type="number" class="qty-input" data-index="${index}" value="${fisikQty}" min="0"></td>
-                <td class="variance-cell ${varianceClass}">${varianceTxt}</td>
+                <td style="text-align:center;">${dbInfo.qtySystem}</td>
+                <td style="text-align:center;"><input type="number" class="qty-input" data-index="${index}" value="${fisikVal}" min="0"></td>
+                <td style="text-align:center;" class="${varClass}">${varianceTxt}</td>
             `;
             tbody.appendChild(tr);
         });
 
+        document.getElementById('dispTotalQty').value = totalFisik;
         document.querySelectorAll('.qty-input').forEach(input => {
             input.addEventListener('input', UI.handleQtyChange);
         });
     },
-
     handleQtyChange: function(e) {
         const index = e.target.getAttribute('data-index');
         let val = e.target.value;
-        
         if(val !== "" && val < 0) { e.target.value = 0; val = 0; }
         
         State.scanData[index].qtyFisik = val;
         State.saveLocal();
-
-        const dbInfo = State.mainDatabase[State.scanData[index].sku] || { qtySystem: 0 };
-        const tr = e.target.closest('tr');
-        const varianceCell = tr.querySelector('.variance-cell');
-
-        if (val === "") {
-            varianceCell.innerText = "-";
-            varianceCell.className = "variance-cell";
-        } else {
-            const variance = parseInt(val) - dbInfo.qtySystem;
-            varianceCell.innerText = variance;
-            varianceCell.className = "variance-cell " + (variance < 0 ? "variance-negative" : (variance > 0 ? "variance-positive" : ""));
-        }
+        UI.renderTable(); // Re-render for totals and variance
+        
+        // Return focus to the input that was just edited to prevent losing cursor position
+        const inputs = document.querySelectorAll('.qty-input');
+        if(inputs[index]) inputs[index].focus();
     }
 };
 
 /**
- * APP INITIALIZATION & EVENT LISTENERS
+ * App Initialization
  */
 const App = {
     init: function() {
         State.loadLocal();
         UI.initLoginState();
 
+        // 1. Login Events
         document.getElementById('btnLogin').addEventListener('click', App.handleLogin);
-        document.getElementById('userIdInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                App.handleLogin();
-            }
-        });
-
+        document.getElementById('userIdInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') App.handleLogin(); });
+        
+        // 2. Logout
         document.getElementById('btnLogout').addEventListener('click', () => {
-            if(confirm("Apakah Anda yakin ingin logout? Data yang belum disave ke cloud akan dihapus dari memori.")) {
-                State.clearLocal();
-                UI.initLoginState();
-            }
+            if(confirm("Exit Application? Unsaved data will be lost.")) { State.clearLocal(); UI.initLoginState(); }
         });
 
+        // 3. Upload Main DB (Universal File Reader)
         document.getElementById('mainDbFile').addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const db = Parser.parseMainDb(event.target.result);
-                State.mainDatabase = db;
-                State.saveLocal();
-                alert("Database Utama berhasil dimuat!");
+            const file = e.target.files[0]; if (!file) return;
+            FileProcessor.processFile(file, true, () => {
+                alert("Master Database Loaded Successfully.");
                 UI.renderTable();
-            };
-            reader.readAsText(file);
+                e.target.value = "";
+            });
         });
 
+        // 4. Upload Scan Data (Universal File Reader)
         document.getElementById('scanFile').addEventListener('change', (e) => {
             if (Object.keys(State.mainDatabase).length === 0) {
-                alert("Peringatan: Silakan upload Database Utama terlebih dahulu!");
-                e.target.value = "";
-                return;
+                alert("Error: Please load Master DB first."); e.target.value = ""; return;
             }
-            const file = e.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const result = Parser.parseScanData(event.target.result);
-                State.scanData = result.data;
-                State.currentRack = result.rack;
-                State.saveLocal();
+            const file = e.target.files[0]; if (!file) return;
+            FileProcessor.processFile(file, false, () => {
                 UI.renderTable();
-            };
-            reader.readAsText(file);
+                e.target.value = "";
+            });
         });
 
-        document.getElementById('btnSaveToCloud').addEventListener('click', async () => {
-            const hasEmpty = State.scanData.some(item => item.qtyFisik === "");
-            if(hasEmpty) {
-                const proceed = confirm("Masih ada Qty Fisik yang kosong. Apakah Anda tetap ingin mengirim data ke sistem?");
-                if(!proceed) return;
-            }
+        // 5. Download PDF Feature
+        document.getElementById('btnDownloadPDF').addEventListener('click', () => {
+            if(State.scanData.length === 0) { alert("No data to export."); return; }
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            doc.setFontSize(14);
+            doc.text(`Stock Take Report - Rack: ${State.currentRack}`, 14, 15);
+            doc.setFontSize(10);
+            doc.text(`Store: ${State.currentStore} | User: ${State.currentUser} | Date: ${document.getElementById('dispDate').value}`, 14, 22);
+            
+            doc.autoTable({
+                html: '#mainTable',
+                startY: 28,
+                theme: 'grid',
+                headStyles: { fillColor: [0, 0, 170] }
+            });
+            
+            doc.save(`StockTake_${State.currentStore}_${State.currentRack}.pdf`);
+        });
 
+        // 6. Save to Spreadsheet
+        document.getElementById('btnSaveToCloud').addEventListener('click', async () => {
+            if(State.scanData.length === 0) return;
+            if(State.scanData.some(item => item.qtyFisik === "") && !confirm("Empty Physical Quantities exist. Proceed saving?")) return;
+            
             const btn = document.getElementById('btnSaveToCloud');
-            btn.innerText = "Menyimpan...";
-            btn.disabled = true;
+            btn.innerText = "Processing..."; btn.disabled = true;
 
             const payload = {
-                userId: State.currentUser,
-                storeCode: State.currentStore,
-                rackNumber: State.currentRack,
+                userId: State.currentUser, storeCode: State.currentStore, rackNumber: State.currentRack,
                 data: State.scanData.map(item => {
                     const dbInfo = State.mainDatabase[item.sku] || { qtySystem: 0, description: "" };
-                    return {
-                        sku: item.sku,
-                        description: dbInfo.description,
-                        qtySystem: dbInfo.qtySystem,
-                        qtyFisik: item.qtyFisik === "" ? 0 : parseInt(item.qtyFisik),
-                        variance: (item.qtyFisik === "" ? 0 : parseInt(item.qtyFisik)) - dbInfo.qtySystem
-                    }
+                    const fisik = item.qtyFisik === "" ? 0 : parseInt(item.qtyFisik);
+                    return { sku: item.sku, description: dbInfo.description, qtySystem: dbInfo.qtySystem, qtyFisik: fisik, variance: fisik - dbInfo.qtySystem }
                 })
             };
 
             try {
-                await fetch(Config.GOOGLE_SCRIPT_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                
-                alert(`Data Rack ${State.currentRack} berhasil disave ke spreadsheet!`);
-                State.scanData = [];
-                State.currentRack = "-";
-                State.saveLocal();
-                UI.renderTable();
-                document.getElementById('scanFile').value = "";
-            } catch (error) {
-                alert("Gagal menghubungi server. Pastikan koneksi internet stabil.");
-            } finally {
-                btn.innerText = "Simpan ke Spreadsheet";
-                btn.disabled = false;
-            }
+                await fetch(Config.GOOGLE_SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                alert(`Data for Rack ${State.currentRack} has been saved.`);
+                State.scanData = []; State.currentRack = "-"; State.saveLocal(); UI.renderTable();
+            } catch (error) { alert("Connection Error."); } 
+            finally { btn.innerText = "💾 Update & Save Data"; btn.disabled = false; }
         });
     },
-
+    
     handleLogin: function() {
-        const inputElem = document.getElementById('userIdInput');
-        const errorElem = document.getElementById('loginError');
-        const id = inputElem.value.trim().toUpperCase();
-        
-        if (!id) {
-            alert("Silakan masukkan User ID terlebih dahulu!");
-            return;
-        }
-
+        const id = document.getElementById('userIdInput').value.trim().toUpperCase();
+        if (!id) return;
         if (Config.UserMapping[id]) {
-            State.currentUser = id;
-            State.currentStore = Config.UserMapping[id];
-            State.saveLocal();
-            UI.initLoginState();
-            errorElem.style.display = 'none';
+            State.currentUser = id; State.currentStore = Config.UserMapping[id]; State.saveLocal();
+            UI.initLoginState(); document.getElementById('loginError').style.display = 'none';
         } else {
-            errorElem.style.display = 'block';
-            alert(`User ID "${id}" tidak terdaftar dalam sistem! Sila cek kembali.`);
+            document.getElementById('loginError').style.display = 'block';
         }
     }
 };
 
-document.addEventListener('DOMContentLoaded', () => {
-    App.init();
-});
+document.addEventListener('DOMContentLoaded', () => App.init());
 </script>
+
 </body>
 </html>
