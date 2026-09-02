@@ -2,7 +2,42 @@
 
 # Mini Stock Take --- Database Schema
 
-Version: 1.0
+Version: 1.1
+
+## Changelog
+
+-   **1.1** --- Disinkronkan dengan `BUSINESS_RULES.md` v1.0. Perubahan:
+    ditambahkan §12a Session Result Summary (memenuhi BUSINESS_RULES §19),
+    kolom `variance_value` pada Working Result View, referensi silang
+    audit trail (§22), dan catatan hierarki dokumen.
+-   **1.0** --- Versi awal.
+
+## Status Dokumen & Hierarki
+
+Dokumen ini adalah **turunan teknis** dari `BUSINESS_RULES.md`. Jika
+ditemukan konflik antara dokumen ini dan `BUSINESS_RULES.md`, maka
+`BUSINESS_RULES.md` yang berlaku (lihat `BUSINESS_RULES.md` §24).
+
+Urutan dokumen yang mengikat:
+
+``` text
+BUSINESS_RULES.md   (aturan bisnis, sumber kebenaran)
+        │
+        ▼
+DATABASE_SCHEMA.md   (dokumen ini --- struktur data)
+        │
+        ▼
+DATA_FORMAT.md       (spesifikasi format file sumber)
+        │
+        ▼
+DEVELOPMENT_STATUS.md (status implementasi vs rencana)
+        │
+        ▼
+AI_HANDOFF.md        (ringkasan handoff untuk lanjutan development)
+        │
+        ▼
+Kode Aplikasi
+```
 
 ## 1. Tujuan
 
@@ -436,11 +471,16 @@ Logical output:
   Price          System
   System Qty     System
   Scan Qty       Scan
-  Variance Qty   Calculated
+  Variance Qty   Calculated (`scan_qty - system_qty`)
+  Variance Value Calculated (`variance_qty × price`)
   Keepstock      Google Sheets
   Box            Google Sheets
   KS Qty         Google Sheets
-  Status         Calculated
+  Status         Calculated (`SCANNED` / `NOT SCANNED`)
+
+Catatan: kolom `No` pada Main Working Table (lihat BUSINESS_RULES.md
+§12) adalah nomor urut tampilan, bukan kolom yang disimpan di
+database.
 
 ------------------------------------------------------------------------
 
@@ -524,6 +564,48 @@ definisi accuracy dapat mengikuti standar bisnis perusahaan.
 `NOT SCANNED` juga harus diperlakukan sesuai aturan finalisasi yang
 disepakati, bukan otomatis dianggap sebagai final variance hanya karena
 belum dipindai.
+
+------------------------------------------------------------------------
+
+# 15a. `session_result_summary` (memenuhi BUSINESS_RULES.md §19)
+
+Business rules mewajibkan aplikasi menampilkan ringkasan hasil setelah
+finalisasi: Total System Qty, Total Scan Qty, Total Variance Qty,
+Total Variance Value, Accuracy %, daftar SKU bervariance, dan daftar
+`NOT SCANNED`.
+
+Nilai-nilai ini **dihitung dari `system_inventory` + `scan_results`**
+dan tidak wajib disimpan sebagai tabel fisik selama data historis
+tidak berubah setelah finalize. Namun untuk performa dan sebagai bukti
+audit yang immutable, direkomendasikan menyimpan snapshot pada saat
+finalize:
+
+  Column                Type            Null Key   Description
+  --------------------- --------------- ------ ---- ------------------------------
+  id                    uuid                NO PK   Summary ID
+  session_id            uuid                NO FK   Session (unique per session)
+  total_system_qty      numeric(18,3)       NO      Total qty sistem
+  total_scan_qty        numeric(18,3)       NO      Total qty hasil scan
+  total_variance_qty    numeric(18,3)       NO      Total variance qty
+  total_variance_value  numeric(18,2)       NO      Total variance value (Rp)
+  accuracy_percent      numeric(5,2)        NO      Accuracy % (lihat §15)
+  not_scanned_count     integer             NO      Jumlah SKU berstatus NOT SCANNED
+  variance_sku_count    integer             NO      Jumlah SKU dengan variance ≠ 0
+  calculated_at         timestamptz         NO      Waktu perhitungan (= waktu finalize)
+
+### Rules
+
+-   Baris ini **hanya dibuat sekali**, pada saat `stock_take_sessions`
+    berubah status ke `FINALIZED` (lihat §18, Transaction Rules §21).
+-   Tidak boleh di-generate ulang secara diam-diam setelah finalize;
+    perubahan hanya lewat proses reopen/unfinalize khusus, dan jika
+    terjadi harus dicatat ulang sebagai audit (lihat §22 Audit Trail
+    Cross-Reference).
+-   `UNIQUE(session_id)`.
+-   Daftar detail SKU bervariance dan SKU `NOT SCANNED` **tidak perlu**
+    diduplikasi di tabel ini --- keduanya tetap diturunkan on-demand dari
+    `system_inventory` + `scan_results` menggunakan `session_id`, karena
+    baris-baris tersebut tidak berubah lagi setelah session terkunci.
 
 ------------------------------------------------------------------------
 
@@ -701,6 +783,27 @@ query hanya store_id tersebut
 
 User toko A tidak boleh membaca atau mengubah Stock Take toko B.
 
+## 22a. Audit Trail Cross-Reference (BUSINESS_RULES.md §22)
+
+Kebutuhan audit di BUSINESS_RULES.md sudah tercakup, tersebar di
+beberapa tabel berikut --- tidak dibutuhkan tabel `audit_log` terpisah
+kecuali kebutuhan audit baru muncul di kemudian hari (mis. audit
+login):
+
+  Kebutuhan Audit (BUSINESS_RULES §22)   Disimpan di
+  --------------------------------------- --------------------------------------------
+  Nama file, waktu, user, jenis upload,
+  status processing                       `upload_batches`
+  Waktu update scan & user yang update    `scan_results.updated_at`, `.updated_by`
+  Waktu finalize & user yang finalize     `stock_take_sessions.finalized_at`, `.finalized_by`
+  Snapshot hasil akhir saat finalize      `session_result_summary.calculated_at` (§15a)
+
+Jika ke depan dibutuhkan audit event granular di luar tabel di atas
+(mis. percobaan login gagal, perubahan role), tambahkan tabel
+`audit_log(id, actor_user_id, store_id, action, entity, entity_id,
+metadata jsonb, created_at)` generik --- jangan memaksakan kebutuhan
+baru ke tabel yang sudah ada.
+
 ------------------------------------------------------------------------
 
 # 23. Source File Format
@@ -787,21 +890,32 @@ GitHub
 19. Jangan mengunci struktur kolom Keepstock sebelum worksheet aktual
     diverifikasi.
 20. Accuracy formula harus dikonfirmasi sebelum production.
+21. Setelah finalize, aplikasi wajib dapat menampilkan Session Result
+    Summary (§15a): total system qty, total scan qty, total variance
+    qty & value, accuracy %, daftar SKU bervariance, dan daftar
+    `NOT SCANNED` (BUSINESS_RULES.md §19).
 
 ------------------------------------------------------------------------
 
 # 26. Next Implementation Step
 
-Setelah schema ini disetujui:
+Sesuai urutan di BUSINESS_RULES.md §25, setelah schema ini disetujui:
 
-1.  Buat migration PostgreSQL.
-2.  Seed 25 toko.
-3.  Buat authentication + store mapping.
-4.  Buat parser System Database.
-5.  Buat parser Scan Result.
-6.  Buat Google Sheets Keepstock connector.
-7.  Buat merge engine.
-8.  Baru implement UI Stock Take.
+1.  Baca `DATA_FORMAT.md` --- spesifikasi kolom & validasi file sumber.
+2.  Baca `DEVELOPMENT_STATUS.md` --- status implementasi saat ini vs
+    rencana, termasuk gap/bug yang sudah teridentifikasi di kode
+    frontend yang ada.
+3.  Baca `AI_HANDOFF.md` --- ringkasan konteks untuk melanjutkan
+    development (manusia maupun AI assistant).
+4.  Buat migration PostgreSQL.
+5.  Seed 25 toko (lihat §4.2).
+6.  Buat authentication + store mapping.
+7.  Buat parser System Database (ikuti `DATA_FORMAT.md`).
+8.  Buat parser Scan Result (ikuti `DATA_FORMAT.md`).
+9.  Buat Google Sheets Keepstock connector.
+10. Buat merge engine + `NOT SCANNED` logic.
+11. Buat Session Result Summary (§15a) pada proses finalize.
+12. Baru implement UI Stock Take.
 
 **Jangan membuat UI final sebelum schema dan business rules ini
 stabil.**
