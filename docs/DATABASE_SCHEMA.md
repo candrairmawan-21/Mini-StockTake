@@ -2,11 +2,15 @@
 
 # Mini Stock Take — Database Schema
 
-**Version:** 2.2  
+**Version:** 2.3  
 **Last updated:** 2026-09-03
 
 ## Changelog
 
+- **2.3** — §5 expanded to "Indexing & Performance": scale reference
+  grounded in verified real data (93,150 SKU rows for one store),
+  bulk-insert strategy, rack-scoped pagination requirement, and
+  when (not yet) to consider partitioning.
 - **2.2** — `stock_take_sessions` gains `last_active_rack` and a
   unique partial index enforcing one `IN_PROGRESS` session per store,
   supporting the multi-day resume flow.
@@ -268,18 +272,92 @@ WRONG RACK (optional)
 REVIEW
 ```
 
-## 5. Indexes
+## 5. Indexing & Performance
+
+### 5.1 Scale reference (verified real data)
+
+Store XWGN's real export: **93,150 System DB rows**, **11,449 raw
+scan rows** (→ ~10,142 unique SKU+Rack pairs after grouping). Assuming
+similar size across all stores:
+
+| Metric | Per store | × 25 stores |
+|---|---:|---:|
+| `system_rows` per snapshot | ~93,000 | ~2.3M |
+| `scan_results` (active, deduped) | ≤ ~93,000 | ≤ ~2.3M |
+| Raw scan rows per upload (not stored as-is — see §5.4) | ~11,000 | ~275,000 |
+
+Multiple System DB re-uploads per session (corrections) multiply the
+`system_rows` figure by the number of snapshots — even at 3–5
+snapshots per session, total volume stays in the **low tens of
+millions of rows**. This is a small dataset for PostgreSQL, which
+routinely handles hundreds of millions of rows; the numbers above do
+not by themselves require partitioning or a different database. What
+they do require is correct indexing and correct write/read patterns
+(§5.2–§5.5) — without those, queries can still be slow even though
+Postgres itself is not the bottleneck.
+
+### 5.2 Required indexes
 
 ```text
 stores: UNIQUE(store_code), UNIQUE(store_name)
 sessions: INDEX(store_id,status), UNIQUE(session_code)
+sessions: UNIQUE(store_id) WHERE status = 'IN_PROGRESS'   -- §"one active session per store"
 upload_batches: INDEX(session_id,upload_type,created_at)
 system_snapshots: UNIQUE(upload_batch_id), INDEX(session_id,snapshot_date)
 system_rows: UNIQUE(snapshot_id,sku,rack_number_normalized)
+system_rows: INDEX(snapshot_id,rack_number_normalized)     -- rack-scoped listing (§5.5)
 scan_results: UNIQUE(session_id,sku,rack_number_normalized), INDEX(session_id,rack_number_normalized)
 scan_history: INDEX(scan_result_id,created_at)
 keepstock_mapping: UNIQUE(store_id)
 ```
+
+The two `rack_number_normalized` indexes are the ones that matter
+most at this scale — every screen the user sees is scoped to one
+rack, so without them a lookup would scan up to ~93,000 rows per
+store instead of the handful in that rack.
+
+### 5.3 Bulk insert, not row-by-row
+
+Parsing a 93,000-row System DB file with one `INSERT` per row (common
+in naive implementations) is the single most likely real-world
+performance problem at this scale — not the database size. Use:
+
+- **`COPY`** (PostgreSQL bulk load) or a driver's batch/multi-row
+  `INSERT ... VALUES (...), (...), ...` in chunks of ~1,000–5,000 rows.
+- Parse and validate in the application layer first (`DATA_FORMAT.md`
+  §3–4), then bulk-write already-clean rows — don't validate row 1,
+  insert row 1, validate row 2, insert row 2.
+- Wrap each upload's insert in a single transaction (§6) so a failure
+  midway does not leave a half-written snapshot.
+
+### 5.4 Deriving Scan Qty at this scale
+
+`BUSINESS_RULES.md` §6a requires `GROUP BY sku, rack_number` over the
+raw scan file. At ~11,000 rows this is trivial in-memory (a hash map
+keyed by `sku|rack`, as shown in `DATA_FORMAT.md` §4) — no need for a
+database round-trip per row. Compute the grouped counts first, then
+bulk upsert the resulting ~10,000 aggregated rows into `scan_results`
+(§5.3). The raw per-scan rows themselves are not persisted
+individually — only the derived count and, on change, a
+`scan_history` entry (§ Recount Rule).
+
+### 5.5 Frontend must paginate by rack, not load the whole session
+
+At ~93,000 rows per store, the API must **never** return an entire
+session's working table in one response. The existing rack-by-rack
+UI (`js/app.js` rack navigation) is the right shape — the backend API
+should mirror it: `GET /sessions/:id/racks/:rackNumber/rows`, scoped
+by the `rack_number_normalized` index above, not `GET
+/sessions/:id/rows` returning everything.
+
+### 5.6 Longer-term (not needed yet)
+
+Only revisit if a single store's cumulative history grows into the
+tens of millions of rows (e.g. years of retained `FINALIZED`
+sessions): table partitioning by `store_id` or by
+`finalized_at` date range, and archiving old `FINALIZED` sessions to
+cold storage. Not required at the 25-store / ~93k-SKU scale observed
+today — listed here so it isn't forgotten if the business grows.
 
 ## 6. Transactions
 
