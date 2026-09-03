@@ -2,8 +2,15 @@
 
 # Mini Stock Take — Processing Engine
 
-**Version:** 1.0  
-**Last updated:** 2026-09-02
+**Version:** 1.1  
+**Last updated:** 2026-09-03
+
+## Changelog
+
+- **1.1** — §3 Scan Result pipeline updated: added explicit
+  count/derive step for Scan Qty (source file has no Scan Qty
+  column — see `DATA_FORMAT.md` §4).
+- **1.0** — Initial pipeline spec.
 
 ## 1. Pipeline
 
@@ -31,11 +38,13 @@ A newer System DB never deletes an older snapshot.
 1. Resolve authenticated store.
 2. Resolve session.
 3. Resolve referenced System snapshot.
-4. Parse and validate.
-5. Normalize rack.
-6. Insert new SKU+rack rows.
-7. For existing SKU+rack, write history then update current quantity.
-8. Commit.
+4. Parse raw rows (SKU, Rack only — **no header, no Scan Qty column**, `DATA_FORMAT.md` §4).
+5. Validate SKU/Rack presence per row.
+6. Normalize rack (`-` → `NO RACK`).
+7. **Group raw rows by (sku, rack_number_normalized) and count them** — this count is the Scan Qty for that pair (`DATA_FORMAT.md` §4). Do this before touching `scan_results`.
+8. Insert new SKU+rack rows with the derived count.
+9. For existing SKU+rack, write history then update current quantity to the newly derived count (replace, never sum — see `BUSINESS_RULES.md` §7).
+10. Commit.
 
 Never replace the complete scan table with the latest file.
 
@@ -77,7 +86,7 @@ Do not add Keepstock Qty to Scan Qty.
 
 ## 5. Rack Ordering
 
-Normalize `Rack = -` with positive System Qty to `NO RACK`.
+Normalize `Rack = -` to `NO RACK`, unconditionally (`BUSINESS_RULES.md` §11).
 
 Rack list is deterministic/alphanumeric. Within a rack, sort SKU ascending after status grouping.
 
