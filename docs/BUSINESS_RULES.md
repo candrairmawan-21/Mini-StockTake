@@ -2,9 +2,19 @@
 
 # Mini Stock Take — Business Rules
 
-**Version:** 2.0  
-**Last updated:** 2026-09-02  
+**Version:** 2.1  
+**Last updated:** 2026-09-03  
 **Status:** Working baseline / SSOT
+
+## Changelog
+
+- **2.1** — Reconciled with real source-file verification performed
+  outside this thread (`XWGN_-_Tarikan_data_2.txt`,
+  `Itemize_XWGN_dummy.xlsx`) and direct confirmation from the
+  business process owner. §5, §6, §11 corrected from "TBD"/assumed to
+  verified facts. §21 Open Decisions updated: items #1 and (partly)
+  #6 resolved.
+- **2.0** — Full rewrite (English, SSOT structure).
 
 > This document is the business source of truth. If another document or code conflicts with it, this document wins until the business rule is explicitly changed.
 
@@ -74,24 +84,48 @@ IN_PROGRESS → FINALIZED
 
 System DB is an expected-inventory **snapshot**.
 
-Required source columns:
+**Verified real-file structure** (`XWGN_-_Tarikan_data_2.txt`): the
+file has a `.txt` extension but its content is CSV, UTF-8, CRLF line
+endings, **with a header row**:
 
-| Business Column | Field |
-|---:|---|
-| 1 | SKU |
-| 2 | Rack Number |
-| 3 | Price |
-| 4 | System Qty |
-| 8 | Description |
-| TBD | Nomor Keepstock / Box Number |
+```text
+sku,rack number,price,qty,,date,nomor keepstock,barcode,description
+```
 
-The exact source position of Nomor Keepstock must be verified from a real file; do not guess it.
+Required source columns (1-based, verified against the real file):
+
+| Business Column | Field | Notes |
+|---:|---|---|
+| 1 | SKU | Internal ID — merge key |
+| 2 | Rack Number | `-` = not yet placed on a rack (see §11) |
+| 3 | Price | |
+| 4 | System Qty | |
+| 5 | *(unused)* | Always empty in the source |
+| 6 | Date | Informational only, not used in calculations |
+| 7 | Nomor Keepstock (Box Number) | **Verified** — see §12a |
+| 8 | Barcode | Distinct from SKU (e.g. EAN code) — never used as merge key |
+| 9 | Description | |
+
+> **Correction from earlier drafts:** Description is Column **9**, not
+> Column 8 (Column 8 is Barcode). This was previously marked as an
+> unverified assumption and has now been confirmed against the real
+> file.
 
 Every System DB upload gets its own snapshot/batch. A new snapshot never deletes historical snapshots.
 
 ## 6. Scan Result — Multi-day
 
-Scan Result is incremental. A later file normally contains only newly processed racks/items.
+**Verified real-file structure** (`Itemize_XWGN_dummy.xlsx`): the scan
+file has **no header row** and only **2 columns**: SKU and Rack
+Number. **There is no Scan Qty column at all.** One row = one physical
+unit scanned. If the same SKU is scanned multiple times on the same
+rack, it appears as multiple duplicate rows. Scan Qty must be
+**derived**, not read — see §7a.
+
+Scan Result is incremental. Per direct confirmation from the process
+owner: a later file is a **separate, independent file** — it normally
+covers different racks than a previous day's file, because racks are
+not tied to a specific calendar day.
 
 ```text
 Day 1 → AG01-01, AG01-02
@@ -99,6 +133,20 @@ Day 2 → AG01-03, AG01-04
 ```
 
 Day 2 must not replace Day 1.
+
+## 6a. Deriving Scan Qty
+
+```text
+scan_qty(SKU, Rack) = COUNT(rows) with the same SKU + Rack Number
+                       within a single uploaded file
+```
+
+Example from the verified real file: SKU `8950431` appears twice on
+rack `R007` → `scan_qty = 2`.
+
+The parser must `GROUP BY sku, rack_number` and count rows before
+persisting to `scan_results` — this replaces any prior assumption of
+reading a "Scan Qty column" from the source file.
 
 ## 7. Recount Rule
 
@@ -150,17 +198,22 @@ Use a red/red-tinted row.
 
 ## 11. Rack `-` → `NO RACK`
 
-```text
-Rack = "-" AND System Qty > 0 → NO RACK
-```
-
-All such rows belong to one virtual rack `NO RACK`.
-
-Recommended default:
+**Confirmed business decision:** all System DB rows with `Rack = "-"`
+are grouped as one virtual rack called `NO RACK`, unconditionally —
+regardless of System Qty.
 
 ```text
-Rack = "-" AND System Qty = 0 → exclude from normal stock-take view
+Rack = "-" → NO RACK
 ```
+
+> An earlier draft proposed excluding `Rack = "-" AND System Qty = 0`
+> rows from the view entirely. The business owner confirmed the
+> simpler unconditional rule above; the qty-based exclusion is **not**
+> adopted and is kept only as a possible future refinement (§21).
+
+The raw `-` value is preserved as-is in the database; `NO RACK` is a
+display/grouping label applied at the application layer, not a data
+transformation.
 
 ## 12. Keepstock
 
@@ -193,13 +246,32 @@ All boxes must be displayable.
 
 No match should display `NO KEEPSTOCK` or `-` consistently.
 
+## 12a. Nomor Keepstock in System DB (Verified)
+
+The System DB "Nomor Keepstock" column (Column 7, §5) **is confirmed
+to be the Keepstock Box Number** referenced in §12. It is often blank
+(items with no active Keepstock box).
+
+- When populated (e.g. `B249`), the application may display it
+  directly as a Box Number without a live Google Sheets lookup for
+  that specific field.
+- **Keepstock Qty is still never available from System DB** — it
+  always requires the Google Sheets lookup (§12).
+- This column holds only **one** value per row. A SKU with multiple
+  boxes is not fully representable by this column alone — that case
+  still relies on the Google Sheets lookup for the complete box list.
+
 ## 13. Scan Quantity
 
-- Numeric and `>= 0`.
-- Zero is valid.
-- Negative is invalid.
-- Blank may exist in an initial upload but must be reviewed/completed before finalization if required by policy.
-- Invalid text must never silently become zero.
+- Since Scan Qty is **derived** by counting rows (§6a), a SKU+Rack
+  combination that has at least one row always has `scan_qty >= 1` —
+  it can never be blank or zero as a direct upload artifact.
+- A SKU+Rack combination with **no rows at all** in the scan file is
+  not "blank Scan Qty" — it is simply absent, and becomes `NOT
+  SCANNED` (§10).
+- Manual correction of a scan_qty value (outside the derived-from-file
+  flow, e.g. a supervisor override) must still be numeric and `>= 0`;
+  negative values and invalid text are never silently coerced to zero.
 
 ## 14. Variance
 
@@ -287,12 +359,12 @@ Minimum audit:
 
 Do not resolve by guess:
 
-1. Exact System DB column for Nomor Keepstock.
-2. Exact Keepstock worksheet columns.
+1. ~~Exact System DB column for Nomor Keepstock.~~ **Resolved** — Column 7 (§5, §12a).
+2. Exact Keepstock worksheet columns (Google Sheets side — not yet verified via API).
 3. Official Accuracy formula.
-4. Final treatment of NOT SCANNED.
-5. Whether blank Scan Qty blocks finalization.
-6. Treatment of `Rack = -` with System Qty 0.
+4. Final treatment of `NOT SCANNED` (does it ever become a final missing/variance decision, and under what policy).
+5. ~~Whether blank Scan Qty blocks finalization.~~ **Superseded** — Scan Qty is always derived from row count (§6a, §13); "blank Scan Qty" as an upload state no longer applies. Whether an entirely-unscanned rack blocks finalization is still open.
+6. Optional refinement: exclude `Rack = "-" AND System Qty = 0` from the working view (not adopted — see §11).
 7. Whether any barcode workflow requires quantity accumulation instead of recount semantics.
 8. ADMIN/SUPERVISOR reopen permissions.
 
