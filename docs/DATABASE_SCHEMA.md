@@ -2,11 +2,14 @@
 
 # Mini Stock Take — Database Schema
 
-**Version:** 2.1  
+**Version:** 2.2  
 **Last updated:** 2026-09-03
 
 ## Changelog
 
+- **2.2** — `stock_take_sessions` gains `last_active_rack` and a
+  unique partial index enforcing one `IN_PROGRESS` session per store,
+  supporting the multi-day resume flow.
 - **2.1** — Reconciled with verified real-file structure
   (`BUSINESS_RULES.md` v2.1). `system_inventory_rows` gains
   `source_date` and `barcode`; `keepstock_box_number` source column
@@ -58,10 +61,29 @@ Never overwrite historical raw uploads or finalized data.
 | session_code | varchar(50) | UNIQUE |
 | start_date | date | required |
 | status | varchar(20) | IN_PROGRESS/FINALIZED |
+| last_active_rack | varchar(50) | nullable; last rack the user was working on, for resume |
 | finalized_at | timestamptz | nullable |
 | finalized_by | uuid | FK |
 | created_at | timestamptz | required |
 | updated_at | timestamptz | required |
+
+**One active session per store.** Enforced with a unique partial
+index — prevents two `IN_PROGRESS` sessions existing for the same
+store at once:
+
+```sql
+CREATE UNIQUE INDEX one_active_session_per_store
+ON stock_take_sessions (store_id)
+WHERE status = 'IN_PROGRESS';
+```
+
+**Resume flow:** on store login, the backend looks up the store's
+`IN_PROGRESS` session. If found, load it (including
+`last_active_rack` to reopen where the user left off) instead of
+creating a new one. If not found, create a new session. This is how
+"stop today, continue tomorrow" works — no special resume feature is
+needed beyond this lookup, as long as every save writes to this
+database rather than to local/browser storage.
 
 ### `upload_batches`
 
