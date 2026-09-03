@@ -2,8 +2,14 @@
 
 # Mini Stock Take — AI Handoff
 
-**Version:** 2.0  
-**Last updated:** 2026-09-02
+**Version:** 2.1  
+**Last updated:** 2026-09-03
+
+## Changelog
+
+- **2.1** — Added §2a Verified Facts. §5 Open Decisions trimmed of
+  items resolved by real-file verification and business confirmation.
+- **2.0** — Full rewrite (English, handoff protocol).
 
 ## 1. Read Order
 
@@ -37,9 +43,25 @@
 14. All Keepstock boxes for a SKU must be displayable.
 15. Finalized sessions are locked.
 16. localStorage is not production persistence.
-17. Do not guess Nomor Keepstock or Keepstock columns.
+17. Do not guess Keepstock worksheet columns (Nomor Keepstock's System DB position is already verified — Column 7).
 18. Accuracy is provisional until confirmed.
 19. UI/PDF/finalize use the same processing engine.
+
+## 2a. Verified Facts (Do Not Re-Ask)
+
+Confirmed against real files (store XWGN: `XWGN_-_Tarikan_data_2.txt`,
+`Itemize_XWGN_dummy.xlsx`) plus direct business confirmation:
+
+- System DB is 9 columns, CSV-in-`.txt`, UTF-8, header present. Full
+  mapping in `DATA_FORMAT.md` §3.
+- Scan Result is 2 columns (SKU, Rack) **only**, **no header**, **no
+  Scan Qty column**. Scan Qty is derived by counting duplicate
+  SKU+Rack rows per file (`DATA_FORMAT.md` §4).
+- Nomor Keepstock (Box Number) = System DB Column 7.
+- Multi-day scan files are independent per rack; recount semantics
+  (replace, not sum) apply if a rack ever repeats.
+- `Rack = "-"` → `NO RACK`, unconditionally (not conditioned on
+  System Qty).
 
 ## 3. Current Repository Reality
 
@@ -77,14 +99,18 @@ Only after the backend/processing foundation is stable.
 
 Do not guess:
 
-- exact Nomor Keepstock source column;
-- Keepstock worksheet schema;
+- Keepstock worksheet schema (Google Sheets side).
 - official accuracy formula;
 - final NOT SCANNED treatment;
-- blank Scan Qty finalization;
-- Rack `-` with System Qty 0;
+- whether an entirely-unscanned rack blocks finalization;
+- optional refinement: exclude `Rack = "-" AND System Qty = 0` (not adopted by default);
 - accumulation vs recount semantics if barcode workflow differs;
 - reopen permissions.
+
+Resolved and no longer open: exact Nomor Keepstock source column
+(Column 7); System DB / Scan Result column structure; blank Scan Qty
+as an upload state (superseded by derived-count model); Rack `-`
+grouping condition (unconditional, confirmed).
 
 ## 6. Handoff Protocol
 
