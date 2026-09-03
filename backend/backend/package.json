@@ -1,0 +1,19 @@
+{
+  "name": "mini-stocktake-backend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "papaparse": "^5.4.1",
+    "pg": "^8.11.5",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/papaparse": "^5.3.14",
+    "@types/pg": "^8.11.6",
+    "typescript": "^5.4.5"
+  }
+}
