@@ -2,8 +2,16 @@
 
 # Mini Stock Take — Database Schema
 
-**Version:** 2.0  
-**Last updated:** 2026-09-02
+**Version:** 2.1  
+**Last updated:** 2026-09-03
+
+## Changelog
+
+- **2.1** — Reconciled with verified real-file structure
+  (`BUSINESS_RULES.md` v2.1). `system_inventory_rows` gains
+  `source_date` and `barcode`; `keepstock_box_number` source column
+  confirmed (no longer TBD).
+- **2.0** — Full rewrite (snapshot model, recount history).
 
 Derived from `BUSINESS_RULES.md`.
 
@@ -96,8 +104,10 @@ Never overwrite historical raw uploads or finalized data.
 | rack_number_normalized | varchar(50) | indexed working value |
 | price | numeric(18,2) | required |
 | system_qty | numeric(18,3) | required |
-| description | text | nullable |
-| keepstock_box_number | varchar(100) | nullable; source position TBD |
+| description | text | nullable (source Column 9) |
+| source_date | date | nullable; source Column 6, informational only |
+| keepstock_box_number | varchar(100) | nullable; **verified** source Column 7 (`BUSINESS_RULES.md` §12a) |
+| barcode | varchar(100) | nullable; source Column 8, distinct from `sku`, never used as merge key |
 | created_at | timestamptz | required |
 
 Unique:
