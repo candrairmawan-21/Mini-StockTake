@@ -1,3 +1,6 @@
+/** @deprecated Legacy prototype path. Do not use for the production Physical Count workflow.
+ * Production flow: Itemize -> stock_take_items -> physical_qty.
+ */
 /**
  * Scan Result upload pipeline — PROCESSING_ENGINE_SPEC.md §3,
  * BUSINESS_RULES.md §7 (recount = replace, never sum).
