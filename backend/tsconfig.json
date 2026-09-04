@@ -1,19 +1,14 @@
 {
-  "name": "mini-stocktake-backend",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "typecheck": "tsc --noEmit"
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "dist",
+    "resolveJsonModule": true
   },
-  "dependencies": {
-    "papaparse": "^5.4.1",
-    "pg": "^8.11.5",
-    "xlsx": "^0.18.5"
-  },
-  "devDependencies": {
-    "@types/node": "^20.11.30",
-    "@types/papaparse": "^5.3.14",
-    "@types/pg": "^8.11.6",
-    "typescript": "^5.4.5"
-  }
+  "include": ["src/**/*.ts"]
 }
