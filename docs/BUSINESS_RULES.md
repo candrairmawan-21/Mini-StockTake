@@ -2,12 +2,22 @@
 
 # Mini Stock Take — Business Rules
 
-**Version:** 2.1  
-**Last updated:** 2026-09-03  
+**Version:** 2.2  
+**Last updated:** 2026-09-04  
 **Status:** Working baseline / SSOT
 
 ## Changelog
 
+- **2.2** — **Confirmed business pivot**: quantity is no longer
+  derived from counting duplicate Itemize rows (old §6a). Itemize is
+  now a checklist only; Physical Qty is always manual entry by the
+  PIC (new §6b, §6c). §7, §9, §10, §13–§18, §21 updated accordingly.
+  §8 tightened: one System DB snapshot per session, locked for its
+  lifetime. This supersedes the COUNT-derived model that was
+  previously verified against the real Itemize file — that
+  verification is still factually accurate about the file's
+  structure, it is the business decision about how to use it that
+  changed.
 - **2.1** — Reconciled with real source-file verification performed
   outside this thread (`XWGN_-_Tarikan_data_2.txt`,
   `Itemize_XWGN_dummy.xlsx`) and direct confirmation from the
@@ -113,42 +123,79 @@ Required source columns (1-based, verified against the real file):
 
 Every System DB upload gets its own snapshot/batch. A new snapshot never deletes historical snapshots.
 
-## 6. Scan Result — Multi-day
+## 6. Itemize — Multi-day
 
-**Verified real-file structure** (`Itemize_XWGN_dummy.xlsx`): the scan
-file has **no header row** and only **2 columns**: SKU and Rack
-Number. **There is no Scan Qty column at all.** One row = one physical
-unit scanned. If the same SKU is scanned multiple times on the same
-rack, it appears as multiple duplicate rows. Scan Qty must be
-**derived**, not read — see §7a.
+**Verified real-file structure** (`Itemize_XWGN_dummy.xlsx`): the file
+has **no header row** and only **2 columns**: SKU and Rack Number.
+There is no quantity column of any kind.
 
-Scan Result is incremental. Per direct confirmation from the process
-owner: a later file is a **separate, independent file** — it normally
-covers different racks than a previous day's file, because racks are
-not tied to a specific calendar day.
+**Confirmed pivot (superseding the derived-count model below):**
+Itemize is a **counting checklist**, not a quantity source. It tells
+the app which SKU+Rack combinations exist on the ground for a rack —
+nothing more. Duplicate SKU+Rack rows within one Itemize file are
+**deduplicated and discarded**; they must **never** be interpreted as
+quantity. The physical quantity for every line always comes from
+**manual entry** by the PIC (§6b), never from counting rows.
+
+> **History note:** an earlier version of this document (and an
+> earlier parser implementation) treated duplicate rows as the
+> quantity signal (`scan_qty = COUNT(rows)`), verified against the
+> same real file. That model has been **deliberately replaced** by
+> direct decision of the business owner — manual entry is the
+> intended workflow, not automatic count-from-duplicates. Any code
+> still reading/writing `scan_results` (COUNT-based) is legacy and
+> must not be used (§8, `DEVELOPMENT_STATUS.md`).
+
+Itemize is incremental. A later file is a separate, independent
+upload — it normally covers different racks than a previous day's
+file, because racks are not tied to a specific calendar day.
 
 ```text
 Day 1 → AG01-01, AG01-02
 Day 2 → AG01-03, AG01-04
 ```
 
-Day 2 must not replace Day 1.
+Day 2 must not remove Day 1's lines.
 
-## 6a. Deriving Scan Qty
+## 6a. Itemize Outcomes
 
-```text
-scan_qty(SKU, Rack) = COUNT(rows) with the same SKU + Rack Number
-                       within a single uploaded file
-```
+When an Itemize row's SKU+Rack is matched against the session's fixed
+System DB snapshot (§8):
 
-Example from the verified real file: SKU `8950431` appears twice on
-rack `R007` → `scan_qty = 2`.
+| Match result | Line status |
+|---|---|
+| SKU found in this exact Rack | `ITEMIZED` |
+| SKU found in System DB, but a different Rack | `WRONG_RACK` |
+| SKU not found in System DB at all | `UNKNOWN_SKU` |
 
-The parser must `GROUP BY sku, rack_number` and count rows before
-persisting to `scan_results` — this replaces any prior assumption of
-reading a "Scan Qty column" from the source file.
+A System DB line with no matching Itemize row stays `NOT_SCANNED`
+(§10) — form generation seeds every System DB row as `NOT_SCANNED`
+first (§6c), and Itemize upload promotes matching rows to `ITEMIZED`.
 
-## 7. Recount Rule
+## 6b. Physical Qty (Manual Entry)
+
+Physical Qty is entered **manually**, one line at a time, by the user
+working the rack — regardless of whether that line's status is
+`ITEMIZED`, `NOT_SCANNED`, `WRONG_RACK`, or `UNKNOWN_SKU`. It is never
+derived from a file.
+
+- Starts `NULL` for every line until entered.
+- Must be numeric and `>= 0` when set; negative or invalid text is
+  rejected, never silently coerced.
+- Every change is recorded in a history/audit trail (previous value,
+  new value, who, when) — see §20.
+- Editing is blocked once the session is `FINALIZED` (§18).
+
+## 6c. Form Generation
+
+Before Itemize or Physical Qty can be entered for a rack, the
+System DB snapshot's rows for that rack are used to seed the working
+list (`stock_take_items`), each starting at status `NOT_SCANNED` and
+Physical Qty `NULL`. Generating the form again for the same rack must
+never overwrite an existing line's Physical Qty or status — it only
+adds System DB rows not already present.
+
+## 7. Recount Rule (Physical Qty)
 
 Primary identity:
 
@@ -156,24 +203,27 @@ Primary identity:
 session_id + SKU + Rack Number
 ```
 
-If the same SKU+rack is uploaded again, it is a recount/update:
-
-```text
-current_scan_qty = latest valid quantity
-```
-
-Do **not** sum the old and new values unless the business explicitly changes this rule. Preserve previous values in history/audit.
+If a user re-enters Physical Qty for the same line, it **replaces**
+the previous value (not summed), and the change is written to history
+(§6b, §20). Re-uploading Itemize for a rack does not touch existing
+Physical Qty values — it only affects `ITEMIZED`/`WRONG_RACK`/
+`UNKNOWN_SKU` status (§6a).
 
 ## 8. System Snapshot Reference
 
-Every Scan Result batch must record the System DB snapshot used for that processing batch. This makes historical results reproducible even after a newer System DB is uploaded.
+A session is locked to **exactly one** System DB snapshot for its
+entire lifetime, set on the first successful System DB upload. All
+Itemize uploads and form generation for that session resolve against
+this one snapshot — there is no re-upload of System DB mid-session.
+(This is stricter than an earlier draft that allowed multiple System
+DB snapshots per session; confirmed by the current implementation.)
 
 ## 9. Merge Rule
 
 Working result is built from:
 
 ```text
-System DB + Scan Result + Keepstock
+System DB (session's locked snapshot) + Itemize outcome + manual Physical Qty + Keepstock
 ```
 
 Primary key for matching:
@@ -182,19 +232,25 @@ Primary key for matching:
 SKU + Rack Number
 ```
 
-A scanned SKU/rack not found in the selected System snapshot remains visible as `UNKNOWN SKU`.
+An Itemized SKU/rack not found in the session's System DB snapshot is
+`UNKNOWN_SKU` (§6a), not silently dropped.
 
 ## 10. NOT SCANNED
 
-For the selected rack, every System DB SKU+rack with no Scan Result must still appear at the bottom of the table with status:
+For the selected rack, every System DB SKU+rack with no matching
+Itemize row and no Physical Qty entered must still appear in the
+table with status:
 
 ```text
-NOT SCANNED
+NOT_SCANNED
 ```
 
 Use a red/red-tinted row.
 
-`NOT SCANNED` is a review state and must **not** silently become physical qty 0/final missing variance until the final business policy is confirmed.
+`NOT_SCANNED` blocks finalization (§18) until Physical Qty is entered
+— it is a review state during the session, but the confirmed
+finalize rule requires every line to have a Physical Qty before the
+session can close.
 
 ## 11. Rack `-` → `NO RACK`
 
@@ -242,7 +298,7 @@ Total: 6
 
 All boxes must be displayable.
 
-**Keepstock is supporting information.** Default physical quantity remains `Scan Qty`; Keepstock Qty is not automatically added to Scan Qty.
+**Keepstock is supporting information.** Default physical quantity remains manually-entered Physical Qty (§6b); Keepstock Qty is not automatically added to it.
 
 No match should display `NO KEEPSTOCK` or `-` consistently.
 
@@ -261,28 +317,27 @@ to be the Keepstock Box Number** referenced in §12. It is often blank
   boxes is not fully representable by this column alone — that case
   still relies on the Google Sheets lookup for the complete box list.
 
-## 13. Scan Quantity
+## 13. Physical Qty Validation
 
-- Since Scan Qty is **derived** by counting rows (§6a), a SKU+Rack
-  combination that has at least one row always has `scan_qty >= 1` —
-  it can never be blank or zero as a direct upload artifact.
-- A SKU+Rack combination with **no rows at all** in the scan file is
-  not "blank Scan Qty" — it is simply absent, and becomes `NOT
-  SCANNED` (§10).
-- Manual correction of a scan_qty value (outside the derived-from-file
-  flow, e.g. a supervisor override) must still be numeric and `>= 0`;
-  negative values and invalid text are never silently coerced to zero.
+- Always starts `NULL` — never derived, always typed in by a user
+  (§6b).
+- Must be numeric and `>= 0` when set; negative values and invalid
+  text are never silently coerced to zero or accepted.
+- A line with `Physical Qty = NULL` is `NOT_SCANNED` (§10) and blocks
+  finalization (§18) until filled.
+- Every change overwrites the previous value and is logged to history
+  (§20) — not summed, not appended.
 
 ## 14. Variance
 
 For rows eligible for normal comparison:
 
 ```text
-variance_qty   = scan_qty - system_qty
+variance_qty   = physical_qty - system_qty     (NULL until Physical Qty is entered)
 variance_value = variance_qty × price
 ```
 
-Unresolved statuses such as `NOT SCANNED` must not be forced into normal variance without the applicable final policy.
+`NOT_SCANNED` lines have no variance (`NULL`) until Physical Qty is entered — they are never forced into a 0-qty variance automatically.
 
 ## 15. Accuracy
 
@@ -301,18 +356,17 @@ This formula must be isolated in one calculation service and confirmed against t
 After finalization show:
 
 - Total System Qty
-- Total Scan Qty
+- Total Physical Qty
 - Total Variance Qty
 - Total Variance Value
 - Accuracy %
 - Variance SKU count
-- NOT SCANNED count
+- (NOT_SCANNED count will always be 0 at this point — finalize requires every line counted, §18)
 - Variance details
-- NOT SCANNED details
 
 ## 17. Save & Update
 
-Changing Scan Qty must:
+Changing Physical Qty must:
 
 1. authorize user;
 2. validate quantity;
@@ -327,14 +381,13 @@ Changing Scan Qty must:
 
 Before finalization validate:
 
+- every `stock_take_items` line for the session has a non-NULL Physical Qty — **confirmed hard rule**: finalize is blocked while any line is `NOT_SCANNED` (i.e. `physical_qty IS NULL`);
 - duplicates resolved;
 - SKU/rack/qty valid;
 - required System snapshot exists;
-- required racks processed according to policy;
-- NOT SCANNED reviewed according to policy;
 - final calculation succeeds.
 
-Then lock the session and snapshot the final summary.
+Then lock the session and snapshot the final summary. A database-level trigger (not just application logic) must also reject edits to a `FINALIZED` session's lines.
 
 ## 19. PDF
 
@@ -350,8 +403,8 @@ PDF and UI must consume the same processed/calculated data. No second calculatio
 Minimum audit:
 
 - upload filename/type/time/user/status;
-- Scan Result source System batch;
-- previous/new Scan Qty for recount/manual update;
+- Itemize source System snapshot reference;
+- previous/new Physical Qty for every manual entry/correction;
 - finalization user/time;
 - final summary snapshot.
 
@@ -362,11 +415,11 @@ Do not resolve by guess:
 1. ~~Exact System DB column for Nomor Keepstock.~~ **Resolved** — Column 7 (§5, §12a).
 2. Exact Keepstock worksheet columns (Google Sheets side — not yet verified via API).
 3. Official Accuracy formula.
-4. Final treatment of `NOT SCANNED` (does it ever become a final missing/variance decision, and under what policy).
-5. ~~Whether blank Scan Qty blocks finalization.~~ **Superseded** — Scan Qty is always derived from row count (§6a, §13); "blank Scan Qty" as an upload state no longer applies. Whether an entirely-unscanned rack blocks finalization is still open.
+4. ~~Final treatment of `NOT SCANNED`.~~ **Resolved** — it blocks finalization until Physical Qty is entered (§10, §18); confirmed hard rule, not a policy toggle.
+5. ~~Whether blank Scan Qty blocks finalization.~~ **Superseded** — the derived-count Scan Qty model itself was replaced by manual Physical Qty entry (§6–§6c). Every line requiring a non-NULL Physical Qty to finalize is now the confirmed rule (§18), not an open question.
 6. Optional refinement: exclude `Rack = "-" AND System Qty = 0` from the working view (not adopted — see §11).
-7. Whether any barcode workflow requires quantity accumulation instead of recount semantics.
-8. ADMIN/SUPERVISOR reopen permissions.
+7. ~~Whether any barcode workflow requires quantity accumulation instead of recount semantics.~~ **Moot** — quantity is never derived from any file anymore (§6).
+8. ADMIN/SUPERVISOR reopen permissions (reopening a `FINALIZED` session).
 
 ## 22. Document Hierarchy
 

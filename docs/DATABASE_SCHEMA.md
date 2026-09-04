@@ -2,11 +2,17 @@
 
 # Mini Stock Take — Database Schema
 
-**Version:** 2.3  
-**Last updated:** 2026-09-03
+**Version:** 2.4  
+**Last updated:** 2026-09-04
 
 ## Changelog
 
+- **2.4** — Confirmed pivot to manual Physical Qty entry
+  (`BUSINESS_RULES.md` v2.2). `scan_results`/`scan_result_history`
+  marked deprecated (kept for rollback reference only, not written
+  to); added `stock_take_items` and `physical_count_history` as their
+  replacements. `session_result_summary.total_scan_qty` renamed to
+  `total_physical_qty`. §6 transaction flow updated.
 - **2.3** — §5 expanded to "Indexing & Performance": scale reference
   grounded in verified real data (93,150 SKU rows for one store),
   bulk-insert strategy, rack-scoped pagination requirement, and
@@ -142,9 +148,12 @@ Unique:
 (snapshot_id, sku, rack_number_normalized)
 ```
 
-### `scan_results`
+### ⚠️ `scan_results` — DEPRECATED, do not write to this table
 
-Current value per session/SKU/rack.
+Superseded by `stock_take_items` + `physical_count_history` below
+(confirmed pivot, `BUSINESS_RULES.md` §6/§6b, v2.2). Kept only for
+historical/rollback reference from the earlier COUNT-derived-quantity
+prototype. Application code must not read or write it going forward.
 
 | Column | Type | Rule |
 |---|---|---|
@@ -159,15 +168,10 @@ Current value per session/SKU/rack.
 | last_updated_at | timestamptz | required |
 | created_at | timestamptz | required |
 
-Unique:
+### ⚠️ `scan_result_history` — DEPRECATED, do not write to this table
 
-```text
-(session_id, sku, rack_number_normalized)
-```
-
-### `scan_result_history`
-
-Required to preserve recount/update history.
+Same status as `scan_results` above — superseded by
+`physical_count_history`.
 
 | Column | Type |
 |---|---|
@@ -181,6 +185,53 @@ Required to preserve recount/update history.
 | source_upload_batch_id | uuid FK |
 | changed_by | uuid FK |
 | change_type | varchar(30) |
+| reason | text nullable |
+| created_at | timestamptz |
+
+### `stock_take_items` (current — replaces `scan_results`)
+
+One row per unique SKU+Rack being counted in a session. Seeded from
+the session's locked System DB snapshot by form generation
+(`BUSINESS_RULES.md` §6c), then updated by Itemize upload (status
+only) and by manual Physical Qty entry (§6a, §6b).
+
+| Column | Type | Rule |
+|---|---|---|
+| id | uuid | PK |
+| session_id | uuid | FK, `ON DELETE CASCADE` |
+| sku | varchar(50) | required |
+| rack_number_raw | varchar(50) | required |
+| rack_number_normalized | varchar(50) | required |
+| system_row_id | uuid | FK to `system_inventory_rows`, nullable (null when `UNKNOWN_SKU`) |
+| system_qty | numeric(18,3) | nullable, copied from System DB at generation/itemize time |
+| price | numeric(18,2) | nullable, copied from System DB |
+| description | text | nullable, copied from System DB |
+| system_keepstock_box | varchar(100) | nullable, copied from System DB |
+| barcode | varchar(100) | nullable, copied from System DB |
+| itemize_upload_batch_id | uuid | FK, nullable |
+| status | varchar(20) | `PENDING` / `ITEMIZED` / `NOT_SCANNED` / `UNKNOWN_SKU` / `WRONG_RACK` |
+| physical_qty | numeric(18,3) | nullable until manually entered — never derived |
+| physical_qty_updated_by | uuid | FK, nullable |
+| physical_qty_updated_at | timestamptz | nullable |
+| created_at | timestamptz | required |
+| updated_at | timestamptz | required |
+
+Unique: `(session_id, sku, rack_number_normalized)`.
+
+A database trigger rejects any `UPDATE`/`DELETE` on this table once
+the owning session is `FINALIZED` (`BUSINESS_RULES.md` §18) — defense
+in depth beyond the application-layer check.
+
+### `physical_count_history` (current — replaces `scan_result_history`)
+
+| Column | Type |
+|---|---|
+| id | uuid PK |
+| stock_take_item_id | uuid FK, `ON DELETE CASCADE` |
+| session_id | uuid FK, `ON DELETE CASCADE` |
+| previous_qty | numeric(18,3) nullable |
+| new_qty | numeric(18,3) nullable |
+| changed_by | uuid FK, required |
 | reason | text nullable |
 | created_at | timestamptz |
 
@@ -225,7 +276,7 @@ Google Sheets remains source of truth.
 | id | uuid PK |
 | session_id | uuid UNIQUE FK |
 | total_system_qty | numeric(18,3) |
-| total_scan_qty | numeric(18,3) |
+| total_physical_qty | numeric(18,3) |
 | total_variance_qty | numeric(18,3) |
 | total_variance_value | numeric(18,2) |
 | accuracy_percent | numeric(5,2) |
@@ -234,6 +285,8 @@ Google Sheets remains source of truth.
 | calculated_at | timestamptz |
 | finalized_by | uuid |
 | formula_version | varchar(30) |
+
+> `total_scan_qty` renamed to `total_physical_qty` (migration 003).
 
 ## 3. Working Result
 
@@ -330,16 +383,17 @@ performance problem at this scale — not the database size. Use:
 - Wrap each upload's insert in a single transaction (§6) so a failure
   midway does not leave a half-written snapshot.
 
-### 5.4 Deriving Scan Qty at this scale
+### 5.4 Itemize dedup at this scale (superseded §6a)
 
-`BUSINESS_RULES.md` §6a requires `GROUP BY sku, rack_number` over the
-raw scan file. At ~11,000 rows this is trivial in-memory (a hash map
-keyed by `sku|rack`, as shown in `DATA_FORMAT.md` §4) — no need for a
-database round-trip per row. Compute the grouped counts first, then
-bulk upsert the resulting ~10,000 aggregated rows into `scan_results`
-(§5.3). The raw per-scan rows themselves are not persisted
-individually — only the derived count and, on change, a
-`scan_history` entry (§ Recount Rule).
+`BUSINESS_RULES.md` §6a (v2.2) no longer derives a quantity — Itemize
+rows are deduplicated (first occurrence wins per SKU+Rack) to produce
+a checklist, at the same ~11,000-row, in-memory-hash-map scale as
+before (`DATA_FORMAT.md` §4). The resulting deduplicated rows are
+bulk-upserted into `stock_take_items` (status only — never
+`physical_qty`, see §5.3). Physical Qty itself is written one row at
+a time as the PIC enters it in the UI — this is a low-frequency,
+per-user-action write, not a bulk file-import path, so no special
+bulk-write handling is needed for it.
 
 ### 5.5 Frontend must paginate by rack, not load the whole session
 
@@ -364,19 +418,25 @@ today — listed here so it isn't forgotten if the business grows.
 System upload:
 
 ```text
-batch → parse → validate → snapshot → rows → commit
+batch → parse → validate → snapshot (locked once per session, §8) → rows → commit
 ```
 
-Scan upload:
+Itemize upload:
 
 ```text
-batch → resolve System snapshot → parse → validate → insert/update → history → commit
+batch → resolve session's locked System snapshot → parse → dedupe → match/status → commit
+```
+
+Physical Qty entry (per line, not a batch upload):
+
+```text
+authorize → validate → write current value → write history → commit
 ```
 
 Finalize:
 
 ```text
-authorize → validate → calculate → summary → FINALIZED → commit
+authorize → validate every line has non-NULL Physical Qty → calculate → summary → FINALIZED → commit
 ```
 
 ## 7. Security

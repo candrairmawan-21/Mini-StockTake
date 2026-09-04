@@ -2,11 +2,16 @@
 
 # Mini Stock Take — Source File Format
 
-**Version:** 2.1  
-**Last updated:** 2026-09-03
+**Version:** 2.2  
+**Last updated:** 2026-09-04
 
 ## Changelog
 
+- **2.2** — Confirmed pivot to manual Physical Qty entry
+  (`BUSINESS_RULES.md` v2.2). §4 renamed Scan Result → Itemize;
+  duplicate-row derivation replaced with plain deduplication (a
+  checklist, not a quantity source). §6–§7 updated for the
+  one-snapshot-per-session model.
 - **2.1** — §3 and §4 rewritten against verified real files
   (`XWGN_-_Tarikan_data_2.txt`, `Itemize_XWGN_dummy.xlsx`). Scan
   Result has **no Scan Qty column and no header** — this is a
@@ -88,7 +93,7 @@ const COL_DESCRIPTION = 8;
 - Description optional.
 - Duplicate SKU+rack inside one snapshot = validation error; never silently sum/select one. Not observed in the verified sample, but must still be handled.
 
-## 4. Scan Result
+## 4. Itemize
 
 **Verified real file** (`Itemize_XWGN_dummy.xlsx`): Excel, single
 sheet, **no header row**, **only 2 columns**.
@@ -101,48 +106,56 @@ sheet, **no header row**, **only 2 columns**.
 ```ts
 const COL_SKU = 0;
 const COL_RACK = 1;
-// no Scan Qty column exists in the source file
+// no quantity column of any kind exists in the source file
 ```
 
-> **Correction:** v2.0 of this document assumed a Column 3 / Scan Qty
-> field ("No in initial source"). Verified against the real file:
-> **there is no such column at all, ever.** This is not a case of an
-> optionally-blank field — the column does not exist.
+> **Correction history:** v2.0 of this document assumed a Column 3 /
+> Scan Qty field. Verified against the real file: no such column
+> exists. v2.1 then derived a quantity by counting duplicate rows.
+> **v2.2 supersedes that**, per confirmed business decision
+> (`BUSINESS_RULES.md` §6): Itemize is a checklist only, and the file
+> structure facts above are still accurate — only what the app *does*
+> with duplicates changed.
 
-### Deriving Scan Qty (replaces reading a column)
+### Deduplicating (replaces deriving Scan Qty)
 
-Each row represents **one physical unit scanned**. Scan Qty is
-derived by counting duplicate rows:
+Each row means "this SKU was seen on this Rack." Duplicate rows for
+the same SKU+Rack carry **no quantity meaning** and must be collapsed
+to a single checklist entry — never counted, never summed.
 
 ```text
-scan_qty(SKU, Rack) = COUNT(rows) with the same SKU + Rack Number
-                       within one uploaded file
+itemize(SKU, Rack) = { seen: true }   -- one entry per unique SKU+Rack,
+                                       -- duplicate rows discarded
 ```
 
 Verified example from the real file: rows `(8950431, R007)` appear
-twice → `scan_qty = 2`. Across 11,449 rows in the sample, 10,142
-unique SKU+Rack pairs were found, of which 1,021 had `scan_qty > 1`.
+twice — under the current rule this produces **one** checklist entry
+for `(8950431, R007)`, not `scan_qty = 2`. (Historically, before the
+confirmed pivot, this same duplication was read as a quantity signal
+— see the correction note above; that interpretation is no longer
+used.)
 
 ```ts
-function deriveScanQty(rows: [sku: string, rack: string][]) {
-  const counts = new Map<string, number>();
+function dedupeItemize(rows: [sku: string, rack: string][]) {
+  const seen = new Map<string, { sku: string; rack: string }>();
   for (const [sku, rack] of rows) {
     const key = `${sku}|${rack}`;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    if (!seen.has(key)) seen.set(key, { sku, rack });
   }
-  return counts; // key "sku|rack" → scan_qty
+  return seen; // key "sku|rack" -> one checklist entry
 }
 ```
 
-Scan Qty, once derived, is always `>= 1` for any pair that appears in
-the file. It is never read, and never blank, as a source value.
+The actual physical quantity for every line — whether it came from
+Itemize or not — is always entered manually afterward
+(`BUSINESS_RULES.md` §6b). This file never supplies a quantity.
 
 ## 5. Header
 
 **System DB:** first row is a header and must be skipped (start
 parsing from row 2). Verified — see §3.
 
-**Scan Result:** **no header row.** Parsing must start from row 1
+**Itemize:** **no header row.** Parsing must start from row 1
 (index 0). Do not apply the same skip-first-row logic used for System
 DB. As a defensive fallback, a parser may heuristically detect an
 unexpected header (e.g. first column is not numeric) and skip it, but
@@ -153,15 +166,20 @@ processing.
 
 ## 6. Incremental Upload
 
-Scan files are normally additive by rack/day. A later file must not replace previous `scan_results`.
+Itemize files are normally additive by rack/day. A later file must
+not remove or replace previously itemized/counted lines in
+`stock_take_items`.
 
-Same `session + SKU + rack` = recount/update, not automatic addition.
-
-Previous values are retained in history.
+Same `session + SKU + rack` uploaded again in a later Itemize file
+just re-confirms/updates the checklist status — it never touches an
+already-entered Physical Qty (`BUSINESS_RULES.md` §6c).
 
 ## 7. System Snapshot Reference
 
-Each Scan Result upload must reference the System DB batch/snapshot used for that upload.
+A session is locked to exactly one System DB snapshot for its entire
+lifetime (`BUSINESS_RULES.md` §8) — Itemize uploads and form
+generation always resolve against that one snapshot, there is no
+per-upload snapshot reference to track.
 
 ## 8. Rack Normalization
 
