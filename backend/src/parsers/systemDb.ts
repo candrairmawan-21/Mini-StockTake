@@ -177,21 +177,23 @@ export function parseSystemDb(fileContent: string): SystemDbParseResult {
     });
   }
 
-  // Duplicate SKU+Rack within one file — flag, never silently pick one
-  // (BUSINESS_RULES.md §7).
+  // Duplicate SKU+Rack within one file: keep the first valid row and reject
+  // later duplicates so the DB UNIQUE constraint can never fail silently.
   const seen = new Map<string, number>();
-  for (const [idx, r] of validRows.entries()) {
+  const dedupedRows: SystemDbRow[] = [];
+  for (const r of validRows) {
     const key = `${r.sku}|${r.rackNumberNormalized}`;
     if (seen.has(key)) {
       invalidRows.push({
-        rowNumber: seen.get(key)!,
+        rowNumber: seen.get(key)! + 1,
         raw: [],
-        reason: `Duplicate SKU+Rack "${key}" also found at row ${idx}`,
+        reason: `Duplicate SKU+Rack "${key}"`,
       });
-    } else {
-      seen.set(key, idx);
+      continue;
     }
+    seen.set(key, dedupedRows.length);
+    dedupedRows.push(r);
   }
 
-  return { validRows, invalidRows, totalRowsParsed: lines.length - 1 };
+  return { validRows: dedupedRows, invalidRows, totalRowsParsed: lines.length - 1 };
 }
