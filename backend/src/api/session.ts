@@ -59,31 +59,70 @@ export async function updateLastActiveRack(pool: Pool, sessionId: string, rackNu
   );
 }
 
-/**
- * Rack-scoped fetch — DATABASE_SCHEMA.md §5.5. Never fetch a whole
- * session's rows in one call; this is what keeps a 93,000-row store
- * fast on both API and frontend.
- */
+/** Rack-scoped working view for the current Physical Count workflow. */
 export async function getRackWorkingView(pool: Pool, sessionId: string, rackNumberNormalized: string) {
   return pool.query(
     `SELECT
-        sr.sku,
-        sr.rack_number_normalized  AS "rack",
-        sir.description,
-        sir.price,
-        sir.system_qty              AS "systemQty",
-        sr.scan_qty                 AS "scanQty",
-        (COALESCE(sr.scan_qty, 0) - sir.system_qty)               AS "varianceQty",
-        (COALESCE(sr.scan_qty, 0) - sir.system_qty) * sir.price    AS "varianceValue",
-        CASE WHEN sr.scan_qty IS NULL THEN 'NOT SCANNED' ELSE 'SCANNED' END AS "status"
-     FROM system_inventory_rows sir
-     JOIN system_inventory_snapshots sis ON sis.id = sir.snapshot_id
-     LEFT JOIN scan_results sr
-       ON sr.session_id = sis.session_id
-       AND sr.sku = sir.sku
-       AND sr.rack_number_normalized = sir.rack_number_normalized
-     WHERE sis.session_id = $1 AND sir.rack_number_normalized = $2
-     ORDER BY (sr.scan_qty IS NULL) ASC, sir.sku ASC` /* NOT SCANNED sorts last — BUSINESS_RULES.md §9 */,
+        sti.id,
+        sti.sku,
+        sti.rack_number_normalized AS "rack",
+        sti.description,
+        sti.price,
+        sti.system_qty AS "systemQty",
+        sti.physical_qty AS "physicalQty",
+        CASE WHEN sti.physical_qty IS NULL THEN NULL
+             ELSE sti.physical_qty - COALESCE(sti.system_qty, 0) END AS "varianceQty",
+        CASE WHEN sti.physical_qty IS NULL OR sti.price IS NULL OR sti.system_qty IS NULL THEN NULL
+             ELSE (sti.physical_qty - sti.system_qty) * sti.price END AS "varianceValue",
+        CASE
+          WHEN sti.status = 'UNKNOWN_SKU' THEN 'UNKNOWN SKU'
+          WHEN sti.status = 'WRONG_RACK' THEN 'WRONG RACK'
+          WHEN sti.status = 'NOT_SCANNED' THEN 'NOT SCANNED'
+          WHEN sti.physical_qty IS NULL THEN 'PENDING PHYSICAL COUNT'
+          ELSE 'COUNTED'
+        END AS status
+     FROM stock_take_items sti
+     JOIN stock_take_sessions s ON s.id = sti.session_id
+     WHERE sti.session_id = $1 AND sti.rack_number_normalized = $2
+     ORDER BY sti.sku ASC`,
     [sessionId, rackNumberNormalized]
   );
+}
+
+/**
+ * Fix the System DB baseline for a session. Once a session has generated
+ * a form, callers should not silently switch it to a newer daily snapshot.
+ */
+export async function assignSystemSnapshot(
+  pool: Pool,
+  sessionId: string,
+  snapshotId: string,
+): Promise<void> {
+  await pool.query(
+    `UPDATE stock_take_sessions
+     SET system_snapshot_id = COALESCE(system_snapshot_id, $2), updated_at = now()
+     WHERE id = $1 AND status = 'IN_PROGRESS'`,
+    [sessionId, snapshotId],
+  );
+}
+
+/** Returns the active session and enough progress data for a Continue screen. */
+export async function getSessionResumeState(pool: Pool, storeId: string) {
+  return pool.query(`
+    SELECT
+      s.id,
+      s.session_code AS "sessionCode",
+      s.store_id AS "storeId",
+      s.status,
+      s.start_date AS "startDate",
+      s.last_active_rack AS "lastActiveRack",
+      s.system_snapshot_id AS "systemSnapshotId",
+      COUNT(sti.id)::int AS "totalLines",
+      COUNT(sti.id) FILTER (WHERE sti.physical_qty IS NOT NULL)::int AS "countedLines"
+    FROM stock_take_sessions s
+    LEFT JOIN stock_take_items sti ON sti.session_id = s.id
+    WHERE s.store_id = $1 AND s.status = 'IN_PROGRESS'
+    GROUP BY s.id
+    LIMIT 1
+  `, [storeId]);
 }
