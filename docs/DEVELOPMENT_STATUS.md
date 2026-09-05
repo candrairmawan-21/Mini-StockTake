@@ -2,11 +2,21 @@
 
 # Mini Stock Take — Development Status
 
-**Version:** 3.0  
+**Version:** 3.1  
 **Review date:** 2026-09-04
 
 ## Changelog
 
+- **3.1** — HTTP layer built and tested end-to-end against a real
+  PostgreSQL instance (not just typechecked): resolve session → upload
+  System DB → open rack → upload Itemize → save Physical Qty →
+  finalize, plus the finalize-lock trigger and duplicate-snapshot
+  rejection. This testing found and fixed a real bug in
+  `workingView.ts` (a line counted directly, without ever being
+  Itemized, incorrectly stayed labeled `NOT SCANNED` forever — status
+  label priority was wrong). The `session.ts` duplication flagged in
+  3.0 is resolved: `getRackWorkingView`/`assignSystemSnapshot` removed
+  from `session.ts`, which now only owns session lifecycle.
 - **3.0** — Full re-review: real backend code now exists
   (`backend/`), not just a frontend prototype. Confirmed pivot to
   manual Physical Qty entry (`BUSINESS_RULES.md` v2.2) reflected
@@ -30,15 +40,16 @@ localStorage / Google Apps Script            <- still not production-ready, unto
 backend/                                     <- new, real backend code
    migrations/001,002,003.sql                <- schema, tested against verified real files
    src/parsers/systemDb.ts, itemize.ts        <- tested against real files, working
-   src/api/*.ts                               <- core logic functions, NOT yet exposed over HTTP
+   src/api/*.ts                               <- core logic, called by src/http/
+   src/http/*.ts                              <- Express HTTP layer, tested end-to-end (§2)
 ```
 
 The old prototype has not been touched or replaced yet — it is still
 what a user would actually see if they opened `index.html` today. The
-new `backend/` code is real, typechecked, and (for the parsers) tested
-against real files, but there is **no HTTP server wiring it up yet**
-and **no new frontend consuming it**. Nothing in `backend/` is reachable
-by an end user yet.
+new `backend/` code, including its HTTP layer, is real, typechecked,
+and tested end-to-end against a real PostgreSQL instance — but it has
+**no auth** (§4) and **no frontend calling it yet**. It is reachable
+over HTTP, but not safe to expose to real users.
 
 ## 2. What's Actually Done (backend/)
 
@@ -52,41 +63,34 @@ by an end user yet.
 | Form generation (seed rack checklist from System DB) | `src/api/formGeneration.ts` | ✅ done |
 | Itemize upload → match/status | `src/api/uploadItemize.ts` | ✅ done |
 | Manual Physical Qty entry + history | `src/api/physicalCount.ts` | ✅ done |
-| Working view (rack-scoped read) | `src/api/workingView.ts` | ✅ done |
-| Finalize (blocks on incomplete Physical Qty, writes summary) | `src/api/finalize.ts` | ✅ done |
-| Session resolve/resume/resume-state (`last_active_rack`, one active session per store) | `src/api/session.ts` | ✅ done — but duplicates parts of `workingView.ts`/`systemDbSnapshot.ts` (§3) |
+| Working view (rack-scoped read) | `src/api/workingView.ts` | ✅ done — canonical version, status-label bug fixed after e2e testing (§ Changelog 3.1) |
+| Finalize (blocks on incomplete Physical Qty, writes summary) | `src/api/finalize.ts` | ✅ done, e2e tested |
+| Session resolve/resume/resume-state (`last_active_rack`, one active session per store) | `src/api/session.ts` | ✅ done — lifecycle only, duplication resolved (§3) |
+| HTTP layer (Express) over all of the above | `src/http/*.ts` | ✅ done, e2e tested against real PostgreSQL |
 
-## 3. Dead Code & Duplication — Needs Cleanup
+## 3. Dead Code & Duplication
 
 **Genuinely dead** (superseded by the confirmed pivot, unused by anything, still reads/writes the deprecated `scan_results`/`scan_result_history` tables):
 
 - `backend/legacy/scanResult.ts` — the old COUNT-derivation parser.
-- `backend/legacy/uploadScanResult.ts` — writes to `scan_results`. Not imported anywhere. (Both moved to `legacy/` already — see this repo.)
+- `backend/legacy/uploadScanResult.ts` — writes to `scan_results`. Not imported anywhere. (Both already moved to `legacy/`.)
 
-**Not dead, but duplicated** — `src/api/session.ts` has grown its own
-`getRackWorkingView`, `assignSystemSnapshot`, and
-`getSessionResumeState`, each already correctly using
-`stock_take_items` (not the deprecated tables), but overlapping with
-logic that already exists elsewhere:
-
-- `session.ts`'s `getRackWorkingView` vs `workingView.ts`'s
-  `getRackWorkingViewV2` — nearly identical query, two names, two
-  places to keep in sync if the shape changes.
-- `session.ts`'s `assignSystemSnapshot` vs `systemDbSnapshot.ts`'s
-  own snapshot-locking `UPDATE` inside `importSystemDbSnapshot` —
-  two different code paths that both claim to be "the" way a
-  session's `system_snapshot_id` gets set.
-
-Recommendation: before building the HTTP layer (§7), pick **one**
-canonical function for each of these and delete the other — otherwise
-the HTTP layer will end up calling whichever one a route happens to
-import, silently diverging over time.
+**Resolved (was flagged in v3.0, fixed in 3.1):** `session.ts`'s
+`getRackWorkingView` and `assignSystemSnapshot` duplicated
+`workingView.ts` and `systemDbSnapshot.ts` respectively. Both were
+removed from `session.ts`, which now only owns session lifecycle
+(`resolveActiveSession`, `updateLastActiveRack`,
+`getSessionResumeState`). The HTTP layer imports the canonical
+versions only.
 
 ## 4. What's Still Missing
 
-- **HTTP layer.** Every function in `src/api/*.ts` takes a `Pool`
-  and plain arguments — none of it is wired to an actual server
-  (Express/Next.js API routes/etc.) or reachable by a client yet.
+- **Auth middleware.** Every route in `src/http/*Routes.ts` currently
+  trusts `storeId`/`userId`/`uploadedBy`/`finalizedBy` sent directly
+  in the request body — flagged with warning comments in the code
+  itself and in `backend/README.md`. This is the top-priority gap:
+  `DATABASE_SCHEMA.md` §7 is explicit that this must not reach real
+  users.
 - **Auth middleware.** No Supabase Auth integration, no role check
   (`STORE_USER`/`SUPERVISOR`/`ADMIN`), no store-from-session
   resolution enforced anywhere in the current code.
@@ -120,7 +124,7 @@ import, silently diverging over time.
 | Final Summary | ✅ done (`session_result_summary`) |
 | Rack PDF | ⚠️ only in the disconnected old prototype |
 | Audit (upload batches, physical count history) | ✅ schema + code for physical count; upload batch audit fields exist but aren't fully populated by any code path yet |
-| HTTP API | ❌ not started |
+| HTTP API | ✅ done, e2e tested (Express, chosen over Next.js since frontend framework is undecided) |
 | Frontend (new) | ❌ not started |
 
 ## 6. Do Not
@@ -131,14 +135,15 @@ import, silently diverging over time.
 - Do not derive Physical Qty from counting Itemize duplicates — confirmed superseded (`BUSINESS_RULES.md` §6).
 - Do not guess Keepstock worksheet columns.
 - Do not duplicate variance/accuracy formulas outside `finalize.ts`/`workingView.ts`.
+- Do not expose `src/http/*` to real users before auth middleware exists (§4) — every route currently trusts client-supplied identity.
 
 ## 7. Recommended Build Order (from here)
 
-1. **Clean up dead code + resolve duplication** (§3) — delete the two genuinely-dead `legacy/` files once confirmed unneeded, and pick one canonical implementation for the overlapping `session.ts` functions before more code is built on top of either version.
-2. **HTTP layer** — wrap existing `src/api/*.ts` functions as routes (Next.js API routes or Express), one per operation (upload System DB, generate form, upload Itemize, save Physical Qty, get working view, finalize).
-3. **Auth middleware** — Supabase Auth + role check + store resolution from session, applied to every route in step 2.
+1. ~~Clean up dead code + resolve duplication.~~ **Done** (§3).
+2. ~~HTTP layer.~~ **Done, e2e tested** (§2).
+3. **Auth middleware** — Supabase Auth + role check + store resolution from session, applied to every route currently in `src/http/*Routes.ts`. This is the next step.
 4. **Keepstock integration** — Google Sheets API client, populate `keepstock_cache`, wire into `workingView.ts`.
-5. **Frontend** — new UI (or migrate the old `index.html` UX) that calls the HTTP layer from step 2.
+5. **Frontend** — new UI (or migrate the old `index.html` UX) that calls the HTTP layer.
 6. **PDF** — reconnect PDF export to read from the new backend's working view, not local state.
 
 ## 8. Current Blockers

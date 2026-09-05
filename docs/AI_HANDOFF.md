@@ -2,11 +2,13 @@
 
 # Mini Stock Take — AI Handoff
 
-**Version:** 2.2  
+**Version:** 2.3  
 **Last updated:** 2026-09-04
 
 ## Changelog
 
+- **2.3** — HTTP layer built and e2e tested against real PostgreSQL;
+  `session.ts` duplication resolved. §3/§4 updated to match.
 - **2.2** — Confirmed pivot to manual Physical Qty entry reflected
   throughout (§2, §2a, §5). §3/§4 updated to describe the real
   `backend/` code that now exists (was purely aspirational before).
@@ -85,9 +87,12 @@ Two things coexist and are **not connected to each other**:
 - `index.html`, `css/style.css`, `js/app.js` — the original frontend
   prototype (localStorage + Google Apps Script). Untouched, still not
   production architecture.
-- `backend/` — real, typechecked, partially-tested backend code
-  (migrations, parsers, core logic functions). No HTTP layer, no
-  auth, no frontend calls into it yet.
+- `backend/` — real, typechecked, end-to-end tested backend code
+  (migrations, parsers, core logic, and an Express HTTP layer on top —
+  tested against a real PostgreSQL instance, not just typechecked).
+  **No auth yet**, no frontend calls into it yet. Reachable over
+  HTTP, but every route currently trusts client-supplied identity —
+  do not expose it to real users before auth exists.
 
 Full gap list in `DEVELOPMENT_STATUS.md`.
 
@@ -95,16 +100,12 @@ Full gap list in `DEVELOPMENT_STATUS.md`.
 
 Per `DEVELOPMENT_STATUS.md` §7, in order:
 
-1. Delete the two genuinely-dead files in `backend/legacy/`
-   (`scanResult.ts`, `uploadScanResult.ts` — both still use the
-   deprecated `scan_results` table). Separately, resolve the
-   duplication in `session.ts` (`getRackWorkingView` vs
-   `workingView.ts`; `assignSystemSnapshot` vs `systemDbSnapshot.ts`)
-   by picking one canonical version of each — both current versions
-   already correctly use `stock_take_items`, so this is about
-   avoiding drift, not fixing wrong logic.
-2. Build the HTTP layer over the existing `src/api/*.ts` functions.
-3. Add auth middleware (Supabase Auth + role + store isolation).
+1. ~~Delete dead code, resolve `session.ts` duplication.~~ **Done.**
+2. ~~Build the HTTP layer.~~ **Done, e2e tested** (`src/http/*`).
+3. **Add auth middleware** (Supabase Auth + role + store isolation) —
+   this is the next step. Every route in `src/http/*Routes.ts` has an
+   explicit warning comment marking where it currently trusts
+   client-supplied `storeId`/`userId` instead.
 4. Keepstock Google Sheets integration.
 5. Frontend that actually calls the new backend.
 6. Reconnect PDF export to the new backend's data.

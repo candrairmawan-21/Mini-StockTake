@@ -26,6 +26,13 @@ export async function finalizeStockTake(pool: Pool, sessionId: string, finalized
         COALESCE(SUM((physical_qty - COALESCE(system_qty,0)) * COALESCE(price,0)),0) AS total_variance_value,
         CASE WHEN COALESCE(SUM(system_qty),0) = 0 THEN 100
              ELSE ((SUM(system_qty) - SUM(ABS(physical_qty - COALESCE(system_qty,0)))) / SUM(system_qty)) * 100 END AS accuracy_percent,
+        -- Note: this counts items whose Itemize-match status is
+        -- NOT_SCANNED, i.e. counted directly without ever appearing
+        -- in an Itemize upload. It is NOT "items missing a count" —
+        -- finalize can only reach this point once every line has a
+        -- non-NULL physical_qty (checked above), so that number is
+        -- always 0 here by construction. This field answers "how many
+        -- lines were counted without going through Itemize first?".
         COUNT(*) FILTER (WHERE status = 'NOT_SCANNED') AS not_scanned_count,
         COUNT(*) FILTER (WHERE physical_qty - COALESCE(system_qty,0) <> 0) AS variance_sku_count
        FROM stock_take_items WHERE session_id = $1`, [sessionId]);

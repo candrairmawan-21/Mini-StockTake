@@ -4,6 +4,12 @@
  * "Stop today, continue tomorrow" is just this lookup, as long as every
  * write goes to Postgres (not browser localStorage, unlike the old
  * prototype — see DEVELOPMENT_STATUS.md).
+ *
+ * Scope note: this module owns session *lifecycle* only (resolve,
+ * resume, resume-state). Rack-scoped data reads live in
+ * workingView.ts, and System DB snapshot locking lives in
+ * systemDbSnapshot.ts — do not re-add duplicate versions of either
+ * here (see DEVELOPMENT_STATUS.md §3 for why this note exists).
  */
 
 import type { Pool } from "pg";
@@ -56,53 +62,6 @@ export async function updateLastActiveRack(pool: Pool, sessionId: string, rackNu
   await pool.query(
     `UPDATE stock_take_sessions SET last_active_rack = $2 WHERE id = $1 AND status = 'IN_PROGRESS'`,
     [sessionId, rackNumberNormalized]
-  );
-}
-
-/** Rack-scoped working view for the current Physical Count workflow. */
-export async function getRackWorkingView(pool: Pool, sessionId: string, rackNumberNormalized: string) {
-  return pool.query(
-    `SELECT
-        sti.id,
-        sti.sku,
-        sti.rack_number_normalized AS "rack",
-        sti.description,
-        sti.price,
-        sti.system_qty AS "systemQty",
-        sti.physical_qty AS "physicalQty",
-        CASE WHEN sti.physical_qty IS NULL THEN NULL
-             ELSE sti.physical_qty - COALESCE(sti.system_qty, 0) END AS "varianceQty",
-        CASE WHEN sti.physical_qty IS NULL OR sti.price IS NULL OR sti.system_qty IS NULL THEN NULL
-             ELSE (sti.physical_qty - sti.system_qty) * sti.price END AS "varianceValue",
-        CASE
-          WHEN sti.status = 'UNKNOWN_SKU' THEN 'UNKNOWN SKU'
-          WHEN sti.status = 'WRONG_RACK' THEN 'WRONG RACK'
-          WHEN sti.status = 'NOT_SCANNED' THEN 'NOT SCANNED'
-          WHEN sti.physical_qty IS NULL THEN 'PENDING PHYSICAL COUNT'
-          ELSE 'COUNTED'
-        END AS status
-     FROM stock_take_items sti
-     JOIN stock_take_sessions s ON s.id = sti.session_id
-     WHERE sti.session_id = $1 AND sti.rack_number_normalized = $2
-     ORDER BY sti.sku ASC`,
-    [sessionId, rackNumberNormalized]
-  );
-}
-
-/**
- * Fix the System DB baseline for a session. Once a session has generated
- * a form, callers should not silently switch it to a newer daily snapshot.
- */
-export async function assignSystemSnapshot(
-  pool: Pool,
-  sessionId: string,
-  snapshotId: string,
-): Promise<void> {
-  await pool.query(
-    `UPDATE stock_take_sessions
-     SET system_snapshot_id = COALESCE(system_snapshot_id, $2), updated_at = now()
-     WHERE id = $1 AND status = 'IN_PROGRESS'`,
-    [sessionId, snapshotId],
   );
 }
 
