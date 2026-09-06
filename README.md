@@ -54,6 +54,7 @@ psql "$DATABASE_URL" -f migrations/001_init_schema.sql
 psql "$DATABASE_URL" -f migrations/002_physical_count_workflow.sql
 psql "$DATABASE_URL" -f migrations/003_finalize_physical_workflow.sql
 psql "$DATABASE_URL" -f migrations/004_security_and_idempotency.sql
+- `005_store_login.sql` — store-only browser login token
 node dist/http/server.js
 ```
 

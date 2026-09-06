@@ -7,7 +7,7 @@
 
 ## Changelog
 
-- **3.2** — Auth middleware (`src/http/auth.ts`, Supabase Auth + role
+- **3.2** — Auth middleware (`src/http/auth.ts`, Store-only login token (no email/password in browser UI) + role
   + store/session isolation) and upload idempotency (file hash,
   `migrations/004_security_and_idempotency.sql`) built and wired into
   every route. Verified: (a) requests with no/invalid bearer token are
@@ -85,7 +85,7 @@ internet, but no longer trusting client-supplied identity either.
 | Finalize (blocks on incomplete Physical Qty, writes summary) | `src/api/finalize.ts` | ✅ done, e2e tested |
 | Session resolve/resume/resume-state (`last_active_rack`, one active session per store) | `src/api/session.ts` | ✅ done — lifecycle only, duplication resolved (§3) |
 | HTTP layer (Express) over all of the above | `src/http/*.ts` | ✅ done, e2e tested against real PostgreSQL |
-| **Auth middleware** (Supabase Auth token verify, role + store/session isolation) | `src/http/auth.ts` | ✅ built, wired into every route — see Changelog 3.2 for exactly what was/wasn't verified |
+| **Auth middleware** (Store-only login token (no email/password in browser UI) token verify, role + store/session isolation) | `src/http/auth.ts` | ✅ built, wired into every route — see Changelog 3.2 for exactly what was/wasn't verified |
 | Upload idempotency (SHA-256 file hash, duplicate upload returns existing batch instead of reprocessing) | `src/http/systemDbRoutes.ts`, `src/http/itemizeRoutes.ts`, `migrations/004` | ✅ done |
 
 ## 3. Dead Code & Duplication
@@ -127,7 +127,7 @@ versions only.
 | Feature | Status |
 |---|---|
 | Dynamic store master | ✅ schema |
-| Backend auth | ✅ built (Supabase Auth + role + store/session isolation) — see §4 for what's not yet integration-tested |
+| Backend auth | ✅ built (Store-only login token (no email/password in browser UI) + role + store/session isolation) — see §4 for what's not yet integration-tested |
 | Store isolation enforcement | ✅ enforced in code (`requireStoreAccess`/`requireSessionAccess`), verified against real data (§ Changelog 3.2) |
 | Session resume (one active session, `last_active_rack`) | ✅ done |
 | System snapshot (locked, one per session) | ✅ done |

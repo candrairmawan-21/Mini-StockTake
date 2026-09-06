@@ -8,6 +8,7 @@ import { itemizeRouter } from "./itemizeRoutes";
 import { physicalCountRouter } from "./physicalCountRoutes";
 import { finalizeRouter } from "./finalizeRoutes";
 import { authMiddleware } from "./auth";
+import { loginRouter } from "./loginRoutes";
 
 /**
  * ⚠️ PARTIALLY SECURED — see DEVELOPMENT_STATUS.md for current status.
@@ -34,7 +35,8 @@ export function createApp(pool: Pool) {
     supabaseUrl: process.env.SUPABASE_URL ?? "",
     supabaseAnonKey: process.env.SUPABASE_ANON_KEY ?? "",
   }));
-  app.use(express.static(path.resolve(__dirname, "../../frontend")));
+  app.use(express.static(path.resolve(__dirname, "../../../frontend")));
+  app.use("/auth", loginRouter(pool));
   app.use(authMiddleware(pool));
 
   app.use("/sessions", sessionRouter(pool));
