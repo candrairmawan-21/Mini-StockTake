@@ -2,11 +2,15 @@
 
 # Mini Stock Take — AI Handoff
 
-**Version:** 2.3  
-**Last updated:** 2026-09-04
+**Version:** 2.4  
+**Last updated:** 2026-09-05
 
 ## Changelog
 
+- **2.4** — Auth middleware built (`src/http/auth.ts`) and wired into
+  every route. Authorization logic verified against real data;
+  Supabase integration itself not yet tested (no sandbox network
+  access to Supabase). §3/§4 updated to match.
 - **2.3** — HTTP layer built and e2e tested against real PostgreSQL;
   `session.ts` duplication resolved. §3/§4 updated to match.
 - **2.2** — Confirmed pivot to manual Physical Qty entry reflected
@@ -88,11 +92,13 @@ Two things coexist and are **not connected to each other**:
   prototype (localStorage + Google Apps Script). Untouched, still not
   production architecture.
 - `backend/` — real, typechecked, end-to-end tested backend code
-  (migrations, parsers, core logic, and an Express HTTP layer on top —
-  tested against a real PostgreSQL instance, not just typechecked).
-  **No auth yet**, no frontend calls into it yet. Reachable over
-  HTTP, but every route currently trusts client-supplied identity —
-  do not expose it to real users before auth exists.
+  (migrations, parsers, core logic, Express HTTP layer, and auth
+  middleware — `src/http/auth.ts`, Supabase Auth + role + store/session
+  isolation). Store isolation is enforced and its logic is verified
+  against real data. **Not yet integration-tested against a real
+  Supabase project** (this sandbox has no network access to Supabase),
+  no user-provisioning flow, no rate limiting/CORS, no frontend calls
+  into it yet.
 
 Full gap list in `DEVELOPMENT_STATUS.md`.
 
@@ -102,11 +108,13 @@ Per `DEVELOPMENT_STATUS.md` §7, in order:
 
 1. ~~Delete dead code, resolve `session.ts` duplication.~~ **Done.**
 2. ~~Build the HTTP layer.~~ **Done, e2e tested** (`src/http/*`).
-3. **Add auth middleware** (Supabase Auth + role + store isolation) —
-   this is the next step. Every route in `src/http/*Routes.ts` has an
-   explicit warning comment marking where it currently trusts
-   client-supplied `storeId`/`userId` instead.
-4. Keepstock Google Sheets integration.
+3. ~~Add auth middleware.~~ **Built, authorization logic verified**
+   (`src/http/auth.ts`). Remaining before production: integration-test
+   against a real Supabase project (untested in this sandbox — no
+   network access to Supabase), add a user-provisioning flow (nothing
+   currently creates a `users` row when someone signs up in Supabase),
+   add rate limiting/CORS.
+4. **Keepstock Google Sheets integration** — this is the next step.
 5. Frontend that actually calls the new backend.
 6. Reconnect PDF export to the new backend's data.
 
@@ -165,3 +173,21 @@ npm run build
 ## 8. Stop Conditions
 
 Stop and ask for clarification if a real source file conflicts with the docs, Keepstock differs from assumptions, accuracy policy changes, NOT SCANNED treatment changes, recount semantics change, or store isolation cannot be guaranteed.
+
+## 2026-09-06 — Web integration milestone
+
+Current repository state is intentionally focused on getting the real system running end-to-end.
+
+### New in this milestone
+- Cleaned repository structure: technical documentation is under `docs/`.
+- Added `frontend/` minimal browser UI served by Express.
+- Browser flow: Supabase login -> `/sessions/resolve` -> System DB upload -> Itemize upload -> rack open -> manual Physical Qty save -> finalize.
+- Added `GET /config` for public Supabase browser configuration and kept service-role credentials out of the frontend.
+- Added `GET /sessions/:sessionId/racks` for rack progress data.
+- Removed an unused Itemize query from form generation.
+
+### Important implementation boundary
+The frontend is a first integration shell, not the final visual product. Do not reintroduce localStorage as a source of truth. Postgres/session APIs remain authoritative.
+
+### Immediate next step
+Run the backend against the real Supabase/Postgres project and complete one real browser E2E using a real store user. Then improve counting UX, Keepstock, Storage, PDF, and deployment hardening in that order.

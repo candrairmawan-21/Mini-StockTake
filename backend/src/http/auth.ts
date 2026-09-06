@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { createClient } from "@supabase/supabase-js";
 import type { Pool } from "pg";
 
-export interface AuthUser { id: string; storeId: string | null; role: "STORE_USER" | "SUPERVISOR" | "ADMIN"; authProviderId: string; }
+export interface AuthUser { id: string; storeId: string | null; storeCode: string | null; storeName: string | null; role: "STORE_USER" | "SUPERVISOR" | "ADMIN"; authProviderId: string; }
 
 declare global { namespace Express { interface Request { authUser?: AuthUser } } }
 
@@ -15,10 +15,10 @@ export function authMiddleware(pool: Pool) {
       const token = header.slice(7);
       const { data, error } = await supabase.auth.getUser(token);
       if (error || !data.user) return res.status(401).json({ error: "INVALID_TOKEN" });
-      const db = await pool.query<{ id:string; store_id:string|null; role:AuthUser["role"]; auth_provider_id:string }>(
-        `SELECT id,store_id,role,auth_provider_id FROM users WHERE auth_provider_id=$1 AND is_active=true`, [data.user.id]);
+      const db = await pool.query<{ id:string; store_id:string|null; role:AuthUser["role"]; auth_provider_id:string; store_code:string|null; store_name:string|null }>(
+        `SELECT u.id,u.store_id,u.role,u.auth_provider_id,s.store_code,s.store_name FROM users u LEFT JOIN stores s ON s.id=u.store_id WHERE u.auth_provider_id=$1 AND u.is_active=true`, [data.user.id]);
       if (!db.rows.length) return res.status(403).json({ error: "USER_NOT_PROVISIONED" });
-      req.authUser = { id: db.rows[0].id, storeId: db.rows[0].store_id, role: db.rows[0].role, authProviderId: db.rows[0].auth_provider_id };
+      req.authUser = { id: db.rows[0].id, storeId: db.rows[0].store_id, storeCode: db.rows[0].store_code ?? null, storeName: db.rows[0].store_name ?? null, role: db.rows[0].role, authProviderId: db.rows[0].auth_provider_id };
       next();
     } catch { res.status(500).json({ error: "AUTH_ERROR" }); }
   };

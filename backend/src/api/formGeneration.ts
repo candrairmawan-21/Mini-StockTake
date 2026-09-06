@@ -16,16 +16,8 @@ export async function generateRackForm(pool: Pool, sessionId: string, rack: stri
     if (session.rows[0].status !== "IN_PROGRESS") throw new Error("SESSION_NOT_EDITABLE");
     if (!session.rows[0].system_snapshot_id) throw new Error("SYSTEM_SNAPSHOT_REQUIRED");
 
-    // 1) Itemize is the primary source of the counting list.
-    const itemized = await client.query(`
-      SELECT sti.sku, sti.rack_number_raw, sti.rack_number_normalized,
-             sir.id AS system_row_id, sir.system_qty, sir.price, sir.description,
-             sir.keepstock_box_number, sir.barcode
-      FROM stock_take_items sti
-      LEFT JOIN system_inventory_rows sir ON sir.id = sti.system_row_id
-      WHERE sti.session_id=$1 AND sti.rack_number_normalized=$2
-      ORDER BY sti.sku ASC`, [sessionId, rack]);
-
+    // Itemize rows are inserted by uploadItemize. This step only appends
+    // System DB rows that were not present in Itemize for the selected rack.
     // 2) System-only rows become NOT_SCANNED review lines.
     const systemOnly = await client.query(`
       SELECT sir.id, sir.sku, sir.rack_number_raw, sir.rack_number_normalized,

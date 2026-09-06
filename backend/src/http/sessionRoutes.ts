@@ -13,7 +13,8 @@ export function sessionRouter(pool: Pool): Router {
       const storeId = u.storeId ?? (req.body?.storeId as string | undefined);
       if (!storeId) return res.status(400).json({ error:"storeId is required for cross-store role" });
       requireStoreAccess(req, storeId);
-      res.json(await resolveActiveSession(pool, storeId, u.id));
+      const session = await resolveActiveSession(pool, storeId, u.id);
+      res.json({ ...session, storeCode: u.storeCode, storeName: u.storeName });
     } catch (e) { const x=errorToHttp(e); res.status(x.status).json({error:x.code,message:x.message}); }
   });
   router.get("/resume/:storeId", async (req,res)=>{

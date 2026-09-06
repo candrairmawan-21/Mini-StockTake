@@ -2,11 +2,25 @@
 
 # Mini Stock Take — Development Status
 
-**Version:** 3.1  
-**Review date:** 2026-09-04
+**Version:** 3.2  
+**Review date:** 2026-09-05
 
 ## Changelog
 
+- **3.2** — Auth middleware (`src/http/auth.ts`, Supabase Auth + role
+  + store/session isolation) and upload idempotency (file hash,
+  `migrations/004_security_and_idempotency.sql`) built and wired into
+  every route. Verified: (a) requests with no/invalid bearer token are
+  rejected 401 against a real HTTP server, (b) the authorization logic
+  itself (`requireStoreAccess`/`requireSessionAccess`) is correct —
+  same-store allowed, cross-store denied, ADMIN/SUPERVISOR bypass
+  store restriction, nonexistent session errors correctly — tested
+  directly against real PostgreSQL data. **Not verified**: an actual
+  valid Supabase-issued token succeeding end-to-end, because this
+  sandbox has no network access to any real Supabase project. Treat
+  the "valid token" path as implemented-but-not-yet-integration-tested
+  until it's exercised against a real Supabase project. Stale warning
+  comment in `server.ts` (claimed no auth existed) corrected.
 - **3.1** — HTTP layer built and tested end-to-end against a real
   PostgreSQL instance (not just typechecked): resolve session → upload
   System DB → open rack → upload Itemize → save Physical Qty →
@@ -38,18 +52,21 @@ index.html + css/style.css + js/app.js      <- old frontend prototype
 localStorage / Google Apps Script            <- still not production-ready, untouched
 
 backend/                                     <- new, real backend code
-   migrations/001,002,003.sql                <- schema, tested against verified real files
+   migrations/001-004.sql                    <- schema, tested against verified real files
    src/parsers/systemDb.ts, itemize.ts        <- tested against real files, working
    src/api/*.ts                               <- core logic, called by src/http/
-   src/http/*.ts                              <- Express HTTP layer, tested end-to-end (§2)
+   src/http/*.ts (incl. auth.ts)              <- Express HTTP layer + auth, tested (§2)
 ```
 
 The old prototype has not been touched or replaced yet — it is still
 what a user would actually see if they opened `index.html` today. The
-new `backend/` code, including its HTTP layer, is real, typechecked,
-and tested end-to-end against a real PostgreSQL instance — but it has
-**no auth** (§4) and **no frontend calling it yet**. It is reachable
-over HTTP, but not safe to expose to real users.
+new `backend/` code, including its HTTP layer and auth middleware, is
+real, typechecked, and tested against a real PostgreSQL instance. It
+correctly rejects unauthenticated/cross-store requests. It still has
+**no frontend calling it**, has not been integration-tested against a
+real Supabase project (§ Changelog 3.2), and has no rate
+limiting/CORS configuration — not yet safe to expose to the public
+internet, but no longer trusting client-supplied identity either.
 
 ## 2. What's Actually Done (backend/)
 
@@ -57,16 +74,19 @@ over HTTP, but not safe to expose to real users.
 |---|---|---|
 | Schema (sessions, snapshots, System DB rows) | `migrations/001_init_schema.sql` | ✅ done |
 | Schema (Itemize + manual Physical Qty workflow) | `migrations/002_physical_count_workflow.sql`, `003_finalize_physical_workflow.sql` | ✅ done, supersedes 001's `scan_results` |
+| Schema (upload idempotency index, auth lookup index) | `migrations/004_security_and_idempotency.sql` | ✅ done |
 | System DB parser | `src/parsers/systemDb.ts` | ✅ done, tested against real 93,150-row file |
 | Itemize parser | `src/parsers/itemize.ts` | ✅ done — dedupes, matches confirmed pivot |
-| System DB bulk import (chunked insert, session-locked snapshot) | `src/api/systemDbSnapshot.ts` | ✅ done |
+| System DB bulk import (chunked insert, session-locked snapshot, file-hash idempotency) | `src/api/systemDbSnapshot.ts` + `src/http/systemDbRoutes.ts` | ✅ done |
 | Form generation (seed rack checklist from System DB) | `src/api/formGeneration.ts` | ✅ done |
-| Itemize upload → match/status | `src/api/uploadItemize.ts` | ✅ done |
+| Itemize upload → match/status (file-hash idempotency) | `src/api/uploadItemize.ts` + `src/http/itemizeRoutes.ts` | ✅ done |
 | Manual Physical Qty entry + history | `src/api/physicalCount.ts` | ✅ done |
 | Working view (rack-scoped read) | `src/api/workingView.ts` | ✅ done — canonical version, status-label bug fixed after e2e testing (§ Changelog 3.1) |
 | Finalize (blocks on incomplete Physical Qty, writes summary) | `src/api/finalize.ts` | ✅ done, e2e tested |
 | Session resolve/resume/resume-state (`last_active_rack`, one active session per store) | `src/api/session.ts` | ✅ done — lifecycle only, duplication resolved (§3) |
 | HTTP layer (Express) over all of the above | `src/http/*.ts` | ✅ done, e2e tested against real PostgreSQL |
+| **Auth middleware** (Supabase Auth token verify, role + store/session isolation) | `src/http/auth.ts` | ✅ built, wired into every route — see Changelog 3.2 for exactly what was/wasn't verified |
+| Upload idempotency (SHA-256 file hash, duplicate upload returns existing batch instead of reprocessing) | `src/http/systemDbRoutes.ts`, `src/http/itemizeRoutes.ts`, `migrations/004` | ✅ done |
 
 ## 3. Dead Code & Duplication
 
@@ -85,15 +105,10 @@ versions only.
 
 ## 4. What's Still Missing
 
-- **Auth middleware.** Every route in `src/http/*Routes.ts` currently
-  trusts `storeId`/`userId`/`uploadedBy`/`finalizedBy` sent directly
-  in the request body — flagged with warning comments in the code
-  itself and in `backend/README.md`. This is the top-priority gap:
-  `DATABASE_SCHEMA.md` §7 is explicit that this must not reach real
-  users.
-- **Auth middleware.** No Supabase Auth integration, no role check
-  (`STORE_USER`/`SUPERVISOR`/`ADMIN`), no store-from-session
-  resolution enforced anywhere in the current code.
+- **Real Supabase integration test.** Auth middleware is built and
+  its authorization logic is verified (§ Changelog 3.2), but no real
+  Supabase-issued JWT has been exercised against it — do this before
+  relying on the "valid token" path in production.
 - **Frontend.** No UI consumes any of `backend/` yet — the old
   `index.html`/`js/app.js` prototype is unrelated and unconnected.
 - **Keepstock integration.** No Google Sheets API client exists;
@@ -101,16 +116,19 @@ versions only.
   but nothing populates or reads them.
 - **PDF generation** against the new backend (the old prototype's
   jsPDF export is not connected to any of this).
-- **Idempotency check** (file hash dedup) — schema has `file_hash`
-  columns but no code checks them before importing.
+- **Rate limiting and CORS** — not configured anywhere in `server.ts`.
+- **`users` provisioning flow** — `auth.ts` looks up `users` by
+  `auth_provider_id` and returns 403 `USER_NOT_PROVISIONED` if no row
+  exists, but nothing yet creates that row when a new Supabase user
+  signs up (no signup webhook/provisioning endpoint).
 
 ## 5. Feature Matrix
 
 | Feature | Status |
 |---|---|
 | Dynamic store master | ✅ schema |
-| Backend auth | ❌ not started |
-| Store isolation enforcement | ❌ not started (schema supports it; no code enforces it yet) |
+| Backend auth | ✅ built (Supabase Auth + role + store/session isolation) — see §4 for what's not yet integration-tested |
+| Store isolation enforcement | ✅ enforced in code (`requireStoreAccess`/`requireSessionAccess`), verified against real data (§ Changelog 3.2) |
 | Session resume (one active session, `last_active_rack`) | ✅ done |
 | System snapshot (locked, one per session) | ✅ done |
 | Itemize checklist (dedup, status matching) | ✅ done |
@@ -124,25 +142,26 @@ versions only.
 | Final Summary | ✅ done (`session_result_summary`) |
 | Rack PDF | ⚠️ only in the disconnected old prototype |
 | Audit (upload batches, physical count history) | ✅ schema + code for physical count; upload batch audit fields exist but aren't fully populated by any code path yet |
+| Upload idempotency (file hash) | ✅ done |
 | HTTP API | ✅ done, e2e tested (Express, chosen over Next.js since frontend framework is undecided) |
 | Frontend (new) | ❌ not started |
 
 ## 6. Do Not
 
 - Do not use `localStorage` as business persistence (old prototype only).
-- Do not add critical authorization to frontend only, once a frontend exists.
 - Do not write to `scan_results`/`scan_result_history` — deprecated (§3).
 - Do not derive Physical Qty from counting Itemize duplicates — confirmed superseded (`BUSINESS_RULES.md` §6).
 - Do not guess Keepstock worksheet columns.
 - Do not duplicate variance/accuracy formulas outside `finalize.ts`/`workingView.ts`.
-- Do not expose `src/http/*` to real users before auth middleware exists (§4) — every route currently trusts client-supplied identity.
+- Do not expose `src/http/*` to the public internet before it has been integration-tested against a real Supabase project and has rate limiting/CORS configured (§4).
+- Do not add a way to bypass `requireStoreAccess`/`requireSessionAccess` "temporarily" for convenience — that reopens the exact hole auth was built to close.
 
 ## 7. Recommended Build Order (from here)
 
 1. ~~Clean up dead code + resolve duplication.~~ **Done** (§3).
 2. ~~HTTP layer.~~ **Done, e2e tested** (§2).
-3. **Auth middleware** — Supabase Auth + role check + store resolution from session, applied to every route currently in `src/http/*Routes.ts`. This is the next step.
-4. **Keepstock integration** — Google Sheets API client, populate `keepstock_cache`, wire into `workingView.ts`.
+3. ~~Auth middleware.~~ **Built, authorization logic verified** (§2) — remaining: integration-test against a real Supabase project, add a user-provisioning flow (§4), add rate limiting/CORS.
+4. **Keepstock integration** — Google Sheets API client, populate `keepstock_cache`, wire into `workingView.ts`. This is the next step.
 5. **Frontend** — new UI (or migrate the old `index.html` UX) that calls the HTTP layer.
 6. **PDF** — reconnect PDF export to read from the new backend's working view, not local state.
 
@@ -164,3 +183,25 @@ backend; source formats, database, multi-day behavior, Physical Qty
 history, NOT_SCANNED handling, variance value, accuracy, finalization,
 audit and PDF consistency are all tested end-to-end against real
 data — not just unit-tested in isolation.
+
+## 3.3 — Web running milestone
+
+- Repository packaging cleaned: all technical docs live under `docs/`; only `README.md` remains at root.
+- Added a minimal browser frontend in `frontend/` served by Express.
+- Frontend critical path implemented: Supabase login, session resolve/resume, System DB upload, Itemize upload, rack open, manual Physical Qty save, finalize.
+- Added public `/config` endpoint for browser Supabase configuration and improved `/health` response.
+- This is the first usable integration shell; it is intentionally not the final UI.
+
+## Next coding order
+
+1. Run against the real Supabase project: migrations + provision one store user + valid login.
+2. Verify browser E2E with one real System DB + Itemize file.
+3. Add rack list/progress endpoint and improve counting UI (search, progress, auto-save feedback).
+4. Integrate Keepstock lookup/cache.
+5. Persist raw uploads to Supabase Storage.
+6. Add PDF generation from the canonical working view.
+7. Add production CORS/rate limiting/deployment configuration.
+
+
+## Frontend UI
+The frontend was redesigned to match the supplied legacy ERP-style reference: Login gate, Midnorth Backend System shell, Inventory navigation, Stock Take Preparation upload workspace, and Stock Take Entry. Upload actions show loading/success/error feedback. Store name is shown in Prepare By and User Posting.

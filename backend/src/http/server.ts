@@ -1,4 +1,5 @@
 import express from "express";
+import path from "path";
 import { Pool } from "pg";
 import { sessionRouter } from "./sessionRoutes";
 import { systemDbRouter } from "./systemDbRoutes";
@@ -9,22 +10,31 @@ import { finalizeRouter } from "./finalizeRoutes";
 import { authMiddleware } from "./auth";
 
 /**
- * ⚠️ NOT PRODUCTION-READY — see DEVELOPMENT_STATUS.md §4/§7.
+ * ⚠️ PARTIALLY SECURED — see DEVELOPMENT_STATUS.md for current status.
  *
- * No auth middleware is wired in yet. Every route currently trusts
- * `storeId`/`userId`/`uploadedBy`/`finalizedBy` values sent directly
- * in the request body — this violates DATABASE_SCHEMA.md §7
- * ("Do not trust frontend store_id") by design, temporarily, so the
- * HTTP layer itself can be tested end-to-end before auth is added.
- * Auth middleware (Supabase Auth + role check) must sit in front of
- * every route below and inject the authenticated store/user instead,
- * before this is exposed to real users.
+ * `authMiddleware` below verifies a Supabase Auth bearer token and
+ * resolves it to an internal `users` row (store, role) before any
+ * route runs. Every route handler uses `req.authUser` /
+ * `requireStoreAccess` / `requireSessionAccess` — it does not trust
+ * `storeId`/`userId` values from the request body anymore.
+ *
+ * Still outstanding before this can take real traffic: rate limiting,
+ * CORS configuration, and end-to-end testing against a real Supabase
+ * project (this sandbox could only verify the unauthenticated-request
+ * path and the authorization logic in isolation — see
+ * DEVELOPMENT_STATUS.md for exactly what was and wasn't verified).
  */
 export function createApp(pool: Pool) {
   const app = express();
   app.use(express.json());
 
-  app.get("/health", (_req, res) => res.json({ ok: true }));
+  app.get("/health", (_req, res) => res.json({ ok: true, service: "mini-stock-take-backend" }));
+  // Supabase URL + anon key are public client configuration; never expose a service-role key here.
+  app.get("/config", (_req, res) => res.json({
+    supabaseUrl: process.env.SUPABASE_URL ?? "",
+    supabaseAnonKey: process.env.SUPABASE_ANON_KEY ?? "",
+  }));
+  app.use(express.static(path.resolve(__dirname, "../../frontend")));
   app.use(authMiddleware(pool));
 
   app.use("/sessions", sessionRouter(pool));
