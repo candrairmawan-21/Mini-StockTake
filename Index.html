@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MIDNORTH BACKEND SYSTEM</title>
+<style><?!= include('App.css'); ?></style>
+</head>
+<body>
+<section id="loginView" class="login-page">
+  <div class="login-shell">
+    <div class="login-top"><div class="brand-mark">MR</div><div><div class="brand-name">MR DIY</div><div class="brand-sub">Indonesia · Midnorth Division</div></div></div>
+    <div class="login-card">
+      <div class="eyebrow">INVENTORY MANAGEMENT</div><h1>MIDNORTH BACKEND SYSTEM</h1><p>Stock Take Management Portal</p>
+      <form id="loginForm"><label for="storeSelect">STORE</label><select id="storeSelect" required><option value="">Loading store...</option></select><button id="loginBtn" type="submit">LOGIN</button></form>
+      <div id="loginError" class="login-message"></div>
+    </div>
+    <div class="login-foot">Internal System · MR DIY Indonesia</div>
+  </div>
+</section>
+
+<section id="appView" class="erp hidden">
+<header class="topbar"><div class="brand"><strong>MR DIY</strong><span>Midnorth Backend System</span></div><nav><button>Navigator</button><button>View</button><button>Tools</button><button>Process</button><button>Store</button></nav><div class="top-company">MR DIY Indonesia <strong id="topStore">—</strong></div><div class="window-actions"><button>−</button><button>□</button><button>×</button></div></header>
+<div class="toolbar"><button id="menuToggle" class="menu-toggle">☰ <span>Hide Menu</span></button><div class="toolbar-icons"><span>◀</span><span>▶</span><span>↻</span><span>＋</span><span>✎</span><span>✓</span><span>⌕</span></div><div class="toolbar-context">INVENTORY / STOCK TAKE</div></div>
+<div class="erp-body">
+<aside id="sidebar" class="sidebar"><div class="module-title">Inventory</div><div class="nav-group"><button data-page="home" class="nav-item active">▰ <span>Home</span></button><button data-page="preparation" class="nav-item">▰ <span>Stock Take Preparation</span></button><button data-page="entry" class="nav-item">▰ <span>Stock Take Entry</span></button></div><div class="sidebar-spacer"></div><div class="system-nav"><button>Store</button><button>Security</button><button>POS Settings</button><button>Maintenance</button><button>Stock AR</button><button>Stock AP</button><button>Inventory</button><button>Reporting</button><button>TMS</button></div></aside>
+<main class="workspace">
+<section id="page-home" class="page"><div class="page-title">HOME</div><div class="home-hero"><div><div class="eyebrow">MIDNORTH DIVISION</div><h2>Stock Take Control Center</h2><p>Kelola persiapan dan pencatatan physical stock untuk toko Anda.</p></div><div class="store-badge"><span>ACTIVE STORE</span><strong id="homeStore">—</strong></div></div><div class="home-cards"><button data-page="preparation" class="home-card"><div class="card-icon">01</div><div><strong>Stock Take Preparation</strong><small>Upload System Database &amp; Itemize / Scan Result</small></div><b>→</b></button><button data-page="entry" class="home-card"><div class="card-icon">02</div><div><strong>Stock Take Entry</strong><small>Input Physical Qty berdasarkan hasil counting</small></div><b>→</b></button></div><div class="quick-status"><div><span>SESSION</span><strong id="homeSession">—</strong></div><div><span>LINES</span><strong id="homeLines">0</strong></div><div><span>COUNTED</span><strong id="homeCounted">0</strong></div><div><span>PROGRESS</span><strong id="homeProgress">0%</strong></div></div></section>
+
+<section id="page-preparation" class="page hidden"><div class="page-title">STOCK TAKE PREPARATION</div><div class="document-head"><div><div class="doc-kicker">STOCK TAKE</div><h2>Preparation</h2></div><div class="doc-status"><span>STATUS</span><strong id="prepStatus">IN PROGRESS</strong></div></div><div class="form-grid"><div><label>Process At</label><div class="field">MIDNORTH</div></div><div><label>Session No.</label><div id="sessionCode" class="field">—</div></div><div><label>Doc. Date</label><div id="docDate" class="field">—</div></div><div><label>Store</label><div id="storeCode" class="field">—</div></div><div class="span-2"><label>Store Name</label><div id="storeName" class="field">—</div></div><div><label>Prepare By</label><div id="prepareBy" class="field">—</div></div><div><label>User Posting</label><div id="userPosting" class="field">—</div></div><div class="span-4"><label>Remarks</label><div id="prepRemarks" class="field">—</div></div></div><div class="section-head"><strong>UPLOAD DATA</strong><span>System Database harus di-upload sebelum Itemize.</span></div><div class="upload-grid"><div class="upload-card"><div class="upload-number">01</div><div class="upload-content"><h3>System Database</h3><p>Snapshot sumber system stock.</p><div class="upload-control"><input id="systemFile" type="file" accept=".txt,.csv"><button id="systemUploadBtn">UPLOAD</button></div><div id="systemProgress" class="upload-message"></div></div></div><div class="upload-card"><div class="upload-number">02</div><div class="upload-content"><h3>Itemize / Scan Result</h3><p>SKU + Rack hasil scanning.</p><div class="upload-control"><input id="itemizeFile" type="file" accept=".txt,.csv,.xlsx,.xls"><button id="itemizeUploadBtn">UPLOAD</button></div><div id="itemizeProgress" class="upload-message"></div></div></div></div><div class="summary-strip"><div><span>SESSION</span><strong id="summarySession">—</strong></div><div><span>TOTAL LINES</span><strong id="summaryLines">0</strong></div><div><span>COUNTED</span><strong id="summaryCounted">0</strong></div><div><span>PROGRESS</span><strong id="summaryProgress">0%</strong></div></div></section>
+
+<section id="page-entry" class="page hidden">
+<div class="page-title">STOCK TAKE</div>
+<div class="document-head"><div><div class="doc-kicker">INVENTORY</div><h2>STOCK TAKE</h2></div><div class="doc-status"><span>STATUS</span><strong id="entryStatus">IN BOX</strong></div></div>
+<div class="qube-document">
+  <div class="qube-left">
+    <div class="form-row"><label>Process At</label><div class="field">MIDNORTH</div></div>
+    <div class="form-row"><label>Store</label><div id="entryStoreName" class="field">—</div></div>
+    <div class="form-row"><label>Prepare By</label><div id="entryPrepareBy" class="field">—</div></div>
+    <div class="form-row"><label>User Posting</label><div id="entryUserPosting" class="field">—</div></div>
+    <div class="form-row"><label>Remarks</label><div id="remarksRack" class="field rack-remarks">—</div></div>
+  </div>
+  <div class="qube-mid">
+    <div class="form-row"><label>Store Code</label><div id="entryStoreCode" class="field">—</div></div>
+    <div class="form-row"><label>Doc. Date</label><div id="entryDocDate" class="field">—</div></div>
+    <div class="form-row"><label>Session No.</label><div id="entrySession" class="field">—</div></div>
+    <div class="form-row"><label>Rack</label><div id="rackTitle" class="field">—</div></div>
+    <div class="form-row"><label># Item/Qty</label><div class="item-counts"><span id="rackItemCount">0</span><span id="rackCountedCount">0</span></div></div>
+  </div>
+  <div class="qube-right"><label>Special Instruction</label><div class="special-instruction">Physical Qty diisi manual berdasarkan hasil counting fisik.</div></div>
+</div>
+<div class="rack-selector"><label>Rack Number</label><input id="rackInput" placeholder="BG05-07" autocomplete="off"><button id="openRackBtn">OPEN</button><button id="prevRackBtn">◀</button><button id="nextRackBtn">▶</button></div>
+<div class="entry-codebar"><span>Enter Code Here</span><input id="quickSkuInput" placeholder="SKU"><span>Quantity</span><input id="quickQtyInput" inputmode="decimal"><button id="quickEnterBtn">Enter</button></div>
+<div class="table-wrap qube-table-wrap"><table><thead><tr><th>#No.</th><th>Sku Code</th><th>Description</th><th>Qty Physical</th><th>Qty System</th><th>Variance</th></tr></thead><tbody id="items"></tbody></table></div>
+<div class="entry-footer"><span id="entryMessage"></span><button id="finalizeBtn" class="finalize">FINALIZE</button></div>
+</section>
+</main>
+<aside class="status-panel"><div class="status-heading">Status</div><div class="status-row active">▣ <span>In Box</span></div><div class="status-row">▣ <span>Hold</span></div><div class="status-row">▣ <span>Updated</span></div><div class="status-row">▣ <span>Erased</span></div><div class="status-row">▣ <span>Locked</span></div><div class="status-row close">✖ <span>Close</span></div></aside>
+</div><footer class="footer"><span id="userInfo">—</span><span>MR DIY Indonesia · Midnorth Backend System</span><button id="logoutBtn">LOGOUT</button></footer>
+</section>
+<script><?!= include('App.js'); ?></script>
+</body></html>
