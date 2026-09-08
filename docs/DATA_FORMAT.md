@@ -1,70 +1,99 @@
 # DATA_FORMAT.md
 
-**Version:** 3.0-GS  
-**Last updated:** 2026-09-08
+## 1. System Database — daily lookup file
 
-## System DB
+The daily System DB is an EXSHELF-like text/CSV export.
 
-Reference: `EXSHELF 03-09.txt`.
+Typical logical structure:
 
-The export is CSV-like text without a reliable RFC4180 structure. The first 8 positions are stable; Description is the remainder.
+`SKU,Rack Number,Price,System Qty,,Date,Keepstock Box,Barcode,Description`
 
-| Position | Field |
-|---:|---|
-| 1 | SKU |
-| 2 | Rack Number |
-| 3 | Price |
-| 4 | System Qty |
-| 5 | unused |
-| 6 | Date |
-| 7 | Keepstock Box |
-| 8 | Barcode |
-| 9+ | Description |
+There may be no header row in the actual export.
 
-### Rules
+Stable fields:
+- 0 SKU
+- 1 Rack
+- 2 Price
+- 3 System Qty
+- 4 reserved
+- 5 Date
+- 6 Keepstock Box
+- 7 Barcode
+- 8+ Description remainder
 
-- SKU is string.
-- Rack is string.
-- Price is numeric >= 0.
-- System Qty is numeric >= 0.
-- Date is `DD/MM/YYYY`.
-- Keepstock Box is string.
-- Barcode is string.
-- Description is free text.
-- Extra commas in Description are preserved.
-- `-` Rack becomes `NO RACK`.
-- blank Rack becomes `NO ADDRESS`; blank Rack + System Qty 0 is rejected.
-- Duplicate SKU + Rack in one snapshot is flagged/audited; the first valid occurrence is retained.
+Description may contain commas and quotes.
 
-### Known malformed source behavior
+Barcode must remain a string.
 
-The supplied file contains a small number of shifted rows where a rack-like field appears before the real rack. The parser detects the observed pattern and realigns it without guessing arbitrary values.
+## 2. System DB lifecycle
 
-## Supplied-file parser verification
+System DB is uploaded every working day as a temporary lookup source.
 
-For `EXSHELF 03-09.txt`:
-- physical lines: 93,214
-- blank lines: 18
-- nonblank rows considered: 93,196
-- accepted rows: 93,190
-- audited invalid rows: 6
+It is not archived as a snapshot.
 
-The six invalid rows are preserved for audit and are not silently fixed.
+Active store sheet:
+- `SYSTEM_DB_LOOKUP`
+- `SYSTEM_DB_UPLOAD_AUDIT`
 
-## Itemize
+The lookup is cleared on finalization and replaced by the next daily upload.
 
-Itemize is a checklist:
-- SKU
-- Rack Number
+## 3. Itemize / Scan Result
 
-No quantity is derived from duplicate Itemize rows.
+Itemize has no header.
 
-Supported active formats:
-- TXT/CSV;
-- XLSX/XLS basic worksheet reader.
+Exactly two logical columns:
 
-## Encoding
+`SKU | Rack Number`
 
-Use UTF-8 for text uploads.
+Each row means:
 
-Do not coerce SKU or Barcode to numeric values.
+> this SKU was seen on this Rack.
+
+It does not contain quantity.
+
+Duplicate SKU+Rack rows are deduplicated.
+
+## 4. Matching
+
+Primary key:
+
+`SKU + normalized Rack`
+
+Outcomes:
+- exact match -> `ITEMIZED`
+- SKU exists elsewhere -> `WRONG_RACK`
+- SKU does not exist -> `UNKNOWN_SKU`
+
+Only Itemize rows are materialized into `STOCK_TAKE_ITEMS`.
+
+System-only rows are not materialized.
+
+## 5. Rack normalization
+
+- `-` -> `NO RACK`
+- empty Rack in System DB + System Qty > 0 -> `NO ADDRESS`
+- empty Rack + System Qty = 0 -> rejected
+
+## 6. Physical Qty
+
+Physical Qty is manual and blank initially.
+
+It is not supplied by Itemize.
+
+## 7. UI fields
+
+`#No. | Sku Code | Description | Qty Physical | Qty System | Variance`
+
+Rack is shown in Remarks/current-rack header.
+
+## 8. Validation
+
+System DB parser audits:
+- blank SKU;
+- invalid price;
+- invalid System Qty;
+- blank rack + zero qty;
+- duplicate SKU+Rack;
+- observed structural anomalies.
+
+Itemize parser validates presence of SKU and Rack and deduplicates SKU+Rack.

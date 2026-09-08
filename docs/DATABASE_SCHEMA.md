@@ -1,90 +1,115 @@
 # DATABASE_SCHEMA.md
 
-**Version:** 3.0-GS  
-**Last updated:** 2026-09-08
-
-This is a Google Sheets schema. SQL migrations are no longer active.
-
 ## MASTER Spreadsheet
 
 ### STORES
-
-| Column | Meaning |
-|---|---|
-| store_code | unique business identifier |
-| store_name | store display name |
-| spreadsheet_id | target store spreadsheet |
-| active | active/inactive |
+- store_code
+- store_name
+- spreadsheet_id
+- active
 
 ### USERS
-
-| Column | Meaning |
-|---|---|
-| store_code | store mapping |
-| user_name | operational username |
-| active | active/inactive |
+- store_code
+- user_name
+- active
 
 ## Store Spreadsheet
 
-### SYSTEM_DB_HISTORY
+### SYSTEM_DB_LOOKUP
+Temporary daily lookup only. Replaced on every System DB upload.
 
-`snapshot_id | uploaded_at | sku | rack_number | price | system_qty | date | keepstock_box | barcode | description`
-
-Historical rows are append-only.
+- sku
+- rack_number_raw
+- rack_number_normalized
+- price
+- system_qty
+- date
+- keepstock_box
+- barcode
+- description
 
 ### SYSTEM_DB_UPLOAD_AUDIT
+Temporary audit for the current daily System DB upload.
 
-`upload_id | snapshot_id | uploaded_at | source_line | raw_line | reason | parsed_sku | parsed_rack | parsed_price | parsed_qty | parsed_barcode | parsed_description`
+The audit schema has no `snapshot_id` because System DB is lookup-only and no historical snapshot is created.
+
+- upload_id
+- uploaded_at
+- source_line
+- raw_line
+- reason
+- parsed_sku
+- parsed_rack
+- parsed_price
+- parsed_qty
+- parsed_barcode
+- parsed_description
 
 ### ITEMIZE_HISTORY
+- upload_id
+- uploaded_at
+- session_id
+- sku
+- rack_number
 
-`upload_id | uploaded_at | session_id | sku | rack_number`
+Itemize history belongs to the active stock-take session and is additive.
 
 ### STOCK_TAKE_ITEMS
+- session_id
+- sku
+- rack_number
+- price
+- system_qty
+- physical_qty
+- variance_qty
+- variance_value
+- status
+- keepstock_box
+- barcode
+- description
+- created_at
+- updated_at
+- checked_at
 
-`session_id | sku | rack_number | price | system_qty | physical_qty | variance_qty | variance_value | status | keepstock_box | barcode | description | created_at | updated_at`
+Only Itemize/Scan rows become stock-take lines.
 
 ### SESSIONS
-
-`session_id | store_code | status | created_at | updated_at | finalized_at | last_active_rack | system_snapshot_id`
+- session_id
+- store_code
+- status
+- created_at
+- updated_at
+- finalized_at
+- last_active_rack
+- system_snapshot_id (legacy compatibility field; active code does not use it)
 
 ### PHYSICAL_COUNT_HISTORY
-
-`history_id | session_id | sku | rack_number | old_qty | new_qty | changed_at | changed_by`
+- history_id
+- session_id
+- sku
+- rack_number
+- old_qty
+- new_qty
+- changed_at
+- changed_by
 
 ### RESULT_SUMMARY
+- session_id
+- finalized_at
+- total_system_qty
+- total_physical_qty
+- total_absolute_variance_qty
+- total_variance_value
+- accuracy
 
-`session_id | finalized_at | total_system_qty | total_physical_qty | total_absolute_variance_qty | total_variance_value | accuracy`
+## Legacy
 
-## Relationships
+`SYSTEM_DB_HISTORY` may remain physically present from earlier versions but is deprecated and must not be used by active code.
 
-```text
-MASTER.STORES
-    |
-    +--> Store Spreadsheet
-             |
-             +--> SYSTEM_DB_HISTORY
-             |       |
-             |       +--> locked by SESSIONS.system_snapshot_id
-             |
-             +--> ITEMIZE_HISTORY
-             |
-             +--> STOCK_TAKE_ITEMS
-             |       |
-             |       +--> PHYSICAL_COUNT_HISTORY
-             |
-             +--> RESULT_SUMMARY
-```
+## Checking-date semantics
 
-## Isolation
+`STOCK_TAKE_ITEMS.checked_at` is the first successful physical-count timestamp for the SKU+Rack line in the active stock-take session.
 
-A store operation resolves its spreadsheet from MASTER using `store_code`.
+It is **not** the System DB upload date and it is **not** the last edit time. It is the source of truth for daily checking productivity.
 
-A supplied session ID is accepted only when it exists in that store's SESSIONS sheet and its `store_code` matches.
-
-## Historical model
-
-- System snapshots are immutable.
-- Physical count changes are append-audited.
-- Final summaries are appended.
-- No SQL database is required.
+The timestamp is written when the team first saves a valid Physical Qty. Later quantity edits do not replace the original `checked_at`. Clearing/re-entering a quantity also does not erase the original checking timestamp.

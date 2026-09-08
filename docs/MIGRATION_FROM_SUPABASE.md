@@ -1,36 +1,28 @@
-# Migration Note — Supabase/PostgreSQL → Google Sheets
+# MIGRATION_FROM_SUPABASE.md
 
-The supplied ZIP was a Supabase/PostgreSQL implementation.
+## Decision
+Supabase/PostgreSQL is no longer used by the active application.
 
-The active project now uses Google Apps Script + Google Sheets.
+The old implementation is retained under `legacy-supabase/` only as a reference for business logic.
 
-## Kept
+## Replacement
+- Express API -> Google Apps Script callable functions
+- PostgreSQL tables -> MASTER + per-store Google Sheets
+- Supabase authentication -> store selection/session access in Apps Script
+- System DB snapshot storage -> temporary `SYSTEM_DB_LOOKUP`
+- SQL working view -> Apps Script working view
+- SQL physical count -> `STOCK_TAKE_ITEMS` + `PHYSICAL_COUNT_HISTORY`
 
-- Qube-style UI structure.
-- Session lifecycle concepts.
-- System snapshot concept.
-- Itemize checklist concept.
-- Manual Physical Qty.
-- Physical Count History.
-- Server-side variance.
-- Finalization rules.
-- Store/session isolation checks.
-- System DB parser strategy for malformed CSV-like export.
+## Important model change
+The System Database is now a daily lookup source, not a historical snapshot.
 
-## Replaced
+The user uploads two files every day:
+- System DB
+- Itemize/Scan Result
 
-- Express HTTP routes → `google.script.run`.
-- PostgreSQL tables → MASTER + per-store Google Sheets.
-- SQL migrations → `Setup.gs`.
-- Supabase bearer auth → Apps Script deployment/organizational access + server-side store/session validation.
-- PostgreSQL transactions → Apps Script locks + controlled write sequences.
-- REST upload endpoints → Apps Script upload functions.
+Itemize is the source of rows displayed in Stock Take Entry.
 
-## Not active
+System-only rows are not displayed.
 
-The following are historical only:
-- `legacy-supabase/backend`
-- `legacy-supabase/frontend`
-- SQL migrations
-
-Do not copy them back into the active runtime.
+## Legacy code
+Do not reactivate SQL migrations, Supabase routes, PostgreSQL pool code, or Express server code.

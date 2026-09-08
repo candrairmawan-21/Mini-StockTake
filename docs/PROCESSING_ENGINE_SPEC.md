@@ -1,91 +1,103 @@
 # PROCESSING_ENGINE_SPEC.md
 
-**Version:** 3.0-GS  
-**Last updated:** 2026-09-08
+## 1. Daily flow
 
-## Active pipeline
+`Login Store -> Create/Resume Session -> Upload System DB -> Upload Itemize -> Open Rack -> Physical Count -> Finalize`
 
-```text
-Upload System DB
-    ↓
-Smart Parse
-    ↓
-Validate + Audit
-    ↓
-Immutable Snapshot
-    ↓
-Lock Snapshot to Session
-    ↓
-Itemize / Rack Checklist
-    ↓
-Generate Rack Working Form
-    ↓
-Manual Physical Qty
-    ↓
-Variance
-    ↓
-Finalize
-    ↓
-Result Summary
-```
+Two uploads are required because they have different roles.
 
-## System DB
+## 2. System DB
 
-One active session uses one locked snapshot.
+System DB is parsed into a temporary per-store lookup.
 
-A second System DB upload for that session is rejected.
+It is not persisted as historical snapshots.
 
-System DB rows are written in chunks to Google Sheets.
+A new System DB upload replaces the temporary lookup.
 
-## Rack generation
+## 3. Itemize
 
-When a rack is opened:
-1. Resolve the session.
-2. Resolve its locked System DB snapshot.
-3. Select System DB rows for that rack.
-4. Create missing `STOCK_TAKE_ITEMS` rows.
-5. Preserve existing Physical Qty.
-6. Update `last_active_rack`.
-7. Return the rack working view.
+Itemize is the authoritative list of physical-count lines.
 
-## Itemize
+For each unique SKU+Rack in Itemize:
+- exact System DB match -> ITEMIZED
+- SKU elsewhere -> WRONG_RACK
+- SKU absent -> UNKNOWN_SKU
 
-Itemize confirms SKU + Rack presence.
+No System DB-only line is inserted into `STOCK_TAKE_ITEMS`.
 
-It does not create quantity.
+## 4. System-only comparison
 
-A System DB line may still appear even when it was never present in Itemize.
+After Itemize is uploaded, compare Itemize keys with System DB keys.
 
-## Physical Qty
+Report:
+- System-only count
+- System-only NO ADDRESS count
 
-Each edit updates one `STOCK_TAKE_ITEMS` row.
+These are control/audit figures only.
 
-Variance is calculated server-side:
+## 5. Working table
 
-```text
-physical_qty - system_qty
-```
+`STOCK_TAKE_ITEMS` contains one row per unique Itemize SKU+Rack for the active session.
 
-The same calculation is used by finalization.
+Fields include:
+- session_id
+- sku
+- rack_number
+- price
+- system_qty
+- physical_qty
+- variance_qty
+- variance_value
+- status
+- keepstock_box
+- barcode
+- description
+- created_at
+- updated_at
 
-## Finalization
+## 6. Rack view
 
-Blocked if any session line has NULL/blank Physical Qty.
+Rack list is derived from `STOCK_TAKE_ITEMS`, therefore from Itemize.
 
-When complete:
-- calculate totals;
-- append RESULT_SUMMARY;
-- set session FINALIZED;
-- prevent further normal edits.
+Opening a rack never seeds additional System DB rows.
 
-## Performance
+## 7. Physical Qty
 
-Google Sheets is used as the operational store. Large System DB writes must use chunked `setValues()` rather than `appendRow()` for every row.
+Manual only.
 
-Rack working views should remain rack-scoped. Do not load the complete 93k-row snapshot into the browser.
+Blank initially.
 
-## UI consistency
+Saving a value updates the row and records history.
 
-The UI and finalization must consume the same stored values and server-side variance rules.
+## 8. Variance
 
-The Qube-style UI is a presentation layer only; it must not become a second calculation engine.
+`physical_qty - system_qty`
+
+Only calculated when both values exist.
+
+## 9. Finalization
+
+Block if:
+- no stock-take lines;
+- any Physical Qty is blank;
+- any status is UNKNOWN_SKU or WRONG_RACK.
+
+On success calculate:
+- total System Qty
+- total Physical Qty
+- total absolute variance
+- total variance value
+- accuracy
+
+Then finalize session and clear temporary System DB lookup/audit.
+
+## 10. Store isolation
+
+All reads/writes resolve through MASTER -> STORES -> store spreadsheet.
+
+
+## Physical checking timestamp
+
+When `savePhysicalQty()` receives a valid Physical Qty for a stock-take line, the engine records `checked_at` only for the first successful check. `updated_at` continues to represent the latest row mutation. This separation is intentional: `checked_at` measures checking productivity, while `updated_at` measures maintenance activity.
+
+`getDailyCheckingSummary(storeCode, sessionId, dateYmd)` can return the number of SKU+Rack lines first checked on a specific Jakarta calendar date. Without `dateYmd`, it returns all daily counts for the session.

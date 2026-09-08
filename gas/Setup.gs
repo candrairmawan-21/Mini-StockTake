@@ -29,20 +29,30 @@ function ensureStoreSpreadsheet(storeCode) {
   }
 
   const ss = SpreadsheetApp.openById(id);
-  ensureSheet_(ss, CONFIG.STORE_SHEETS.SYSTEM_DB_HISTORY,
-    ['snapshot_id','uploaded_at','sku','rack_number','price','system_qty','date','keepstock_box','barcode','description']);
+  ensureSheet_(ss, CONFIG.STORE_SHEETS.SYSTEM_DB_LOOKUP,
+    ['sku','rack_number_raw','rack_number_normalized','price','system_qty','date','keepstock_box','barcode','description']);
   ensureSheet_(ss, CONFIG.STORE_SHEETS.SYSTEM_DB_AUDIT,
-    ['upload_id','snapshot_id','uploaded_at','source_line','raw_line','reason','parsed_sku','parsed_rack','parsed_price','parsed_qty','parsed_barcode','parsed_description']);
+    ['upload_id','uploaded_at','source_line','raw_line','reason','parsed_sku','parsed_rack','parsed_price','parsed_qty','parsed_barcode','parsed_description']);
   ensureSheet_(ss, CONFIG.STORE_SHEETS.ITEMIZE_HISTORY,
     ['upload_id','uploaded_at','session_id','sku','rack_number']);
   ensureSheet_(ss, CONFIG.STORE_SHEETS.STOCK_TAKE_ITEMS,
-    ['session_id','sku','rack_number','price','system_qty','physical_qty','variance_qty','variance_value','status','keepstock_box','barcode','description','created_at','updated_at']);
+    ['session_id','sku','rack_number','price','system_qty','physical_qty','variance_qty','variance_value','status','keepstock_box','barcode','description','created_at','updated_at','checked_at']);
   ensureSheet_(ss, CONFIG.STORE_SHEETS.SESSIONS,
     ['session_id','store_code','status','created_at','updated_at','finalized_at','last_active_rack','system_snapshot_id']);
   ensureSheet_(ss, CONFIG.STORE_SHEETS.PHYSICAL_HISTORY,
     ['history_id','session_id','sku','rack_number','old_qty','new_qty','changed_at','changed_by']);
   ensureSheet_(ss, CONFIG.STORE_SHEETS.RESULT_SUMMARY,
     ['session_id','finalized_at','total_system_qty','total_physical_qty','total_absolute_variance_qty','total_variance_value','accuracy']);
+
+  // Make the operational checking timestamp immediately readable in each
+  // store spreadsheet. This is the date/time the team first checked the SKU.
+  const stockTakeSh=ss.getSheetByName(CONFIG.STORE_SHEETS.STOCK_TAKE_ITEMS);
+  const stockTakeMap=getHeaderMap_(stockTakeSh);
+  if(stockTakeMap.checked_at){
+    stockTakeSh.getRange(2,stockTakeMap.checked_at,Math.max(stockTakeSh.getMaxRows()-1,1),1)
+      .setNumberFormat('dd/MM/yyyy HH:mm:ss');
+  }
+
   removeEmptyDefaultSheet_(ss);
   return {ok:true,storeCode:row.storeCode,storeName:row.storeName,spreadsheetId:id};
 }

@@ -1,50 +1,48 @@
-# SYSTEM DB PARSER TEST REPORT
+# PARSER_TEST_REPORT.md
 
-**File:** `EXSHELF 03-09.txt`  
-**Test date:** 2026-09-08  
-**Parser:** `gas/SystemDB.gs`
+## System DB
+Reference: `EXSHELF 03-09.txt`
 
-## Result
+Observed:
+- 93,214 physical lines
+- 18 blank lines
+- 93,196 nonblank
+- 93,190 valid
+- 6 invalid/audit rows
 
-| Metric | Count |
-|---|---:|
-| Physical lines | 93,214 |
-| Blank lines | 18 |
-| Nonblank rows considered | 93,196 |
-| Valid rows | 93,190 |
-| Invalid/audit rows | 6 |
+The parser handles commas/quotes in Description and observed shifted-field anomalies.
 
-## Smart corrections verified
+## Itemize
+Reference: `Itemize XWGN dummy.xlsx`
 
-Two observed malformed/shifted records were successfully realigned:
+Observed:
+- 11,449 raw rows
+- 10,142 unique SKU+Rack rows
+- 1,307 duplicate rows
 
-- source line 38,386:
-  - final Rack: `AG07-01`
-  - Price: `9000`
-  - System Qty: `0`
-  - Barcode: `8979473`
-  - Description: `LINT ROLLER 10CM#811`
+The first two columns are SKU and Rack Number, with no business quantity.
 
-- source line 85,422:
-  - final Rack: `C02`
-  - Price: `14500`
-  - System Qty: `47`
-  - Barcode: `9084875`
-  - Description: `STATIONERY SET 2006#`
+## Cross-file comparison
+Using the supplied sample files:
+- exact SKU+Rack matches: 45
+- Itemize SKU exists in System DB but at another Rack: 9,732
+- Itemize SKU not found in System DB: 365
+- unique Itemize rows: 10,142
+- System DB rows not present in Itemize: 93,145
 
-## Invalid rows retained for audit
+This is a test-data comparison. The dummy Itemize file is not assumed to represent production match quality.
 
-The remaining six rows are not silently corrected:
+## Display rule
+Only the 10,142 unique Itemize SKU+Rack rows are candidates for display. System-only rows are not inserted.
 
-1. Blank SKU.
-2. Blank Rack + System Qty 0.
-3. Duplicate SKU + Rack.
-4. One-field malformed record.
-5. One-field malformed record.
-6. Negative System Qty.
 
-They are written to `SYSTEM_DB_UPLOAD_AUDIT` when an upload is performed.
+## v1.2.1 repair validation
 
-## Important
-
-This is a parser verification result, not proof that the entire production upload flow has been tested in Apps Script. The next live test must upload the actual file through the Web App and verify the same counts in the target store spreadsheet.
+The following runtime defects identified in v1.2 were repaired:
+- XLSX shared-string text nodes now use the Text-node API instead of `asElement()`.
+- `SYSTEM_DB_UPLOAD_AUDIT` header count now matches the 11-value audit rows.
+- System DB upload timestamp/upload ID are created in outer scope and are available to re-enrichment.
+- Itemize accepts `.xlsx`, `.csv`, and `.txt`; binary `.xls` is no longer advertised or routed to the XLSX parser.
+- Physical-count audit prefers the active Google account email when Apps Script exposes it, with configured operator fallback.
+- Finalized sessions return the browser to the store/session entry screen instead of leaving a dead session in the ERP view.
+- The previously validated Session lifecycle behavior is preserved and a regression test function is included.

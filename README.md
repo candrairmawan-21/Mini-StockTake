@@ -21,8 +21,8 @@ Google Apps Script Web App
         |      +-- USERS
         |
         +-- Store Spreadsheet per store
-               +-- SYSTEM_DB_HISTORY
-               +-- SYSTEM_DB_UPLOAD_AUDIT
+               +-- SYSTEM_DB_LOOKUP (temporary daily lookup)
+               +-- SYSTEM_DB_UPLOAD_AUDIT (temporary daily audit)
                +-- ITEMIZE_HISTORY
                +-- STOCK_TAKE_ITEMS
                +-- SESSIONS
@@ -93,6 +93,15 @@ Qty Physical - Qty System
 
 Blank Physical Qty produces blank Variance.
 
+## Two daily input files
+
+Every day the operator uploads two files for the active stock-take session:
+
+1. System Database (EXSHELF-like) — lookup only.
+2. Itemize / Scan Result — SKU + Rack, and this file determines which lines are displayed.
+
+System-only rows are never automatically added to the count table.
+
 ## System DB
 
 Reference file:
@@ -136,13 +145,15 @@ The parser also successfully normalizes the observed shifted rows around source 
 
 ## Upload model
 
-A System DB upload creates an immutable `snapshot_id`.
+System DB is a temporary daily lookup.
 
-A session can be locked to one System DB snapshot. A second System DB upload to the same session is rejected.
+- It replaces the previous temporary lookup for the store.
+- It is not archived.
+- No historical snapshot is created.
+- Existing Itemize lines can be re-enriched without overwriting Physical Qty.
+- Invalid System DB rows are stored only in the current daily audit.
 
-Previous snapshots are never overwritten.
-
-Invalid rows are stored in `SYSTEM_DB_UPLOAD_AUDIT`.
+Itemize is additive within the active session and is the display source.
 
 ## Itemize
 
@@ -214,3 +225,10 @@ This package does not require:
 - SQL migrations.
 
 Those are historical reference material only.
+
+
+## Checking date / daily productivity
+
+`STOCK_TAKE_ITEMS.checked_at` records when the team first successfully checks a SKU+Rack by entering Physical Qty. It is not the System DB upload date and is not a last-edit timestamp.
+
+Use `getDailyCheckingSummary(storeCode, sessionId, dateYmd)` to count SKU+Rack lines first checked on a specific day, or omit `dateYmd` to receive all daily counts for the session.

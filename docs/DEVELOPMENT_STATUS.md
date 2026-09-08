@@ -1,111 +1,50 @@
 # DEVELOPMENT_STATUS.md
 
-**Version:** 4.0-GS  
-**Review date:** 2026-09-08
+## Current architecture
+Google Apps Script + Google Sheets is the active production direction.
 
-## Completed before migration
+Supabase/PostgreSQL is legacy/reference only.
 
-- MASTER → Store Spreadsheet mapping.
-- 25 store spreadsheets provisioned.
-- Required store sheets created.
-- Empty default Sheet1 cleaned.
-- Session lifecycle tested:
-  - create;
-  - get;
-  - store isolation;
-  - touch;
-  - finalize;
-  - finalized edit rejection.
+## Completed
+- MASTER -> per-store spreadsheet provisioning
+- 25 store spreadsheets
+- default Sheet1 cleanup
+- store/session isolation
+- session lifecycle
+- Qube-style UI
+- System DB smart parser
+- real System DB parser verification
+- Itemize XLSX/TXT/CSV parser
+- daily two-file workflow model
+- Itemize-driven display rows
+- exact SKU+Rack lookup enrichment
+- UNKNOWN SKU and WRONG RACK handling
+- Physical Qty history
+- First physical checking timestamp (`checked_at`)
+- Daily checking summary by checking date
+- variance
+- finalize
 
-## ZIP review
+## Current two-file model
+Daily:
+1. System DB -> temporary lookup
+2. Itemize/Scan -> display source
 
-The supplied ZIP was deeply reviewed.
+System-only rows are comparison/audit only and never become physical-count rows.
 
-It contains:
-- Express/TypeScript backend;
-- PostgreSQL persistence;
-- Supabase authentication;
-- SQL migrations;
-- Qube-style frontend;
-- System DB parser;
-- Itemize parser;
-- physical count/finalize workflow.
+## Current next test
+Deploy the GAS project and test:
+- login
+- System DB upload
+- Itemize upload
+- rack navigation
+- physical entry
+- variance
+- unresolved SKU/rack blocking
+- finalize
 
-The business logic is reusable, but the persistence/API/auth stack is not.
+## Latest change — v1.2
 
-## Active migration
+The system now records `checked_at` on each `STOCK_TAKE_ITEMS` line when the team first successfully enters Physical Qty. This is the operational checking date/time and is independent from `updated_at`.
 
-The active implementation is now Google Apps Script + Google Sheets.
-
-### Implemented
-
-- Apps Script Web App entrypoint.
-- MASTER store lookup.
-- Store spreadsheet lookup.
-- Session creation/resume.
-- Session store isolation.
-- System DB snapshot storage.
-- Snapshot lock per session.
-- Smart System DB parser.
-- System DB invalid-row audit.
-- Chunked System DB writes.
-- Itemize deduplication.
-- XLSX/XLS basic Itemize reader.
-- Rack form generation.
-- Manual Physical Qty.
-- Physical Count History.
-- Server-side Variance.
-- Finalization and Result Summary.
-- Qube-style UI retained.
-
-## Supplied System DB verification
-
-`EXSHELF 03-09.txt`:
-- 93,214 physical lines.
-- 18 blank lines.
-- 93,196 nonblank rows.
-- 93,190 valid rows.
-- 6 audit rows.
-
-The parser successfully handles descriptions containing commas and observed shifted-field records.
-
-## Not yet production-verified
-
-- Full Apps Script Web App deployment.
-- Live writes against all 25 stores.
-- Full-size 93k-row upload through the browser.
-- Production Itemize XLSX variants.
-- Keepstock integration.
-- PDF generation.
-- Official Accuracy formula confirmation.
-- Production identity/security policy.
-
-## Current milestone
-
-**Milestone: Google Sheets backend + Qube UI integration foundation**
-
-Next recommended test:
-
-```text
-MASTER
-  ↓
-select store
-  ↓
-create/resume session
-  ↓
-upload EXSHELF 03-09.txt
-  ↓
-verify snapshot + audit count
-  ↓
-upload Itemize
-  ↓
-open rack
-  ↓
-enter Physical Qty
-  ↓
-verify Variance
-  ↓
-finalize
-```
-
-Do not reintroduce PostgreSQL/Supabase into this path.
+Daily productivity can be read with `getDailyCheckingSummary()`.

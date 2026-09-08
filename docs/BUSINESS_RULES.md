@@ -1,208 +1,175 @@
-# BUSINESS_RULES.md
+# BUSINESS_RULES.md — Mini Stock Take
 
-# Mini Stock Take — Business Rules
+## 1. Source of truth and daily workflow
 
-**Version:** 3.0-GS  
-**Last updated:** 2026-09-08  
-**Status:** Active Google Sheets / Apps Script baseline
+The production architecture is Google Apps Script + Google Sheets.
 
-## 1. Source of truth
+Every working day of Mini Stock Take, the user uploads **two files** for the selected store/session:
 
-The active storage architecture is Google Sheets.
+1. **System Database** — EXSHELF-like export containing SKU, Rack, Price, System Qty, date, Keepstock, Barcode, Description.
+2. **Itemize / Scan Result** — checklist containing exactly **SKU + Rack Number**.
 
-The previous Supabase/PostgreSQL architecture is deprecated and must not be used for new production code.
+The two files have different jobs:
 
-## 2. Store model
+- **Itemize / Scan Result is the display source.**
+- **System Database is lookup-only.**
 
-MASTER contains:
-- `store_code`
-- `store_name`
-- `spreadsheet_id`
-- `active`
+The System Database is NOT a historical dataset and is NOT archived as a snapshot.
 
-`store_code` is the business identifier.
+## 2. Itemize controls what appears in Stock Take Entry
 
-Each active store has its own Google Spreadsheet.
+A SKU+Rack combination appears in the Midnorth Stock Take Entry table only when it exists in the uploaded Itemize/Scan file.
 
-Store data must never be read from or written to another store's spreadsheet.
+Therefore:
 
-## 3. Session
+- System DB row + no matching Itemize row = **NOT DISPLAYED**.
+- System DB row at the same Rack + SKU in Itemize = display and enrich from System DB.
+- Itemize SKU/Rack not found in System DB = display as `UNKNOWN SKU`.
+- Itemize SKU found in System DB but at a different Rack = display as `WRONG RACK`.
 
-Each store has at most one active `IN_PROGRESS` session.
+System-only rows are never automatically appended to the physical-count form.
 
-Session fields:
-- session_id
-- store_code
-- status
-- created_at
-- updated_at
-- finalized_at
-- last_active_rack
-- system_snapshot_id
+## 3. System-only exceptions
 
-A session can continue across multiple days.
+The comparison between System DB and Itemize is still important for control/audit:
 
-## 4. System DB
+### 3.1 SKU registered on the same Rack but absent from Itemize
 
-System DB is the expected inventory source for a stock-take session.
+It is a **SYSTEM-ONLY** exception.
 
-A session uses exactly one System DB snapshot.
+It is NOT inserted into the table.
 
-The snapshot is immutable after creation.
+The upload response should report the number of System DB SKU+Rack rows that were not present in Itemize.
 
-A later System DB upload creates a new snapshot, but it cannot replace the snapshot already locked to an active session.
+### 3.2 SKU has no Rack/Address in System DB and is absent from Itemize
 
-## 5. System DB source columns
+It is also not displayed.
 
-Expected logical positions:
+`Rack = ""` is normalized to `NO ADDRESS` only when System Qty > 0. If it is not in Itemize, it remains a System DB lookup/audit exception and never becomes a physical-count line.
+
+### 3.3 Rack = `-`
+
+`-` is normalized to `NO RACK` unconditionally.
+
+## 4. Itemize format
+
+Itemize has no header and exactly two logical columns:
+
+`SKU | Rack Number`
+
+It is a checklist, not a quantity source.
+
+Duplicate SKU+Rack rows have no quantity meaning and are deduplicated.
+
+Itemize uploads are additive within the active session.
+
+## 5. System DB format
+
+Expected logical fields:
 
 1. SKU
 2. Rack Number
 3. Price
 4. System Qty
-5. reserved/unused
+5. reserved/blank
 6. Date
 7. Keepstock Box
 8. Barcode
 9+. Description
 
-Barcode is a string and must preserve leading zeroes.
+The export can contain commas and quotes inside Description. The parser therefore uses the first eight commas as structural separators and treats the remainder as Description.
 
-Description is free text and may contain commas or quote characters.
+Barcode is always handled as text to preserve leading zeroes.
 
-## 6. Smart parsing
+## 6. System DB lookup lifecycle
 
-The parser must tolerate the known export behavior.
+The System DB upload:
 
-It must:
-- preserve Description commas;
-- detect malformed rows;
-- detect known shifted-field patterns;
-- retain raw invalid rows in audit;
-- never invent business values.
+1. parses and validates the daily file;
+2. clears the previous temporary lookup for that store;
+3. writes the current parsed rows into `SYSTEM_DB_LOOKUP`;
+4. stores only the current upload's audit rows in `SYSTEM_DB_UPLOAD_AUDIT`;
+5. does NOT create a snapshot/history;
+6. does NOT archive the source database.
 
-`Rack = "-"` is normalized to `NO RACK`.
+When the stock take session is finalized, the temporary lookup and audit are cleared.
 
-A genuinely blank rack is normalized to `NO ADDRESS`; blank rack + zero System Qty is rejected.
+The old `SYSTEM_DB_HISTORY` sheet may exist in stores provisioned by earlier versions, but active code no longer writes to it.
 
-## 7. Itemize
+## 7. Stock Take Entry UI
 
-Itemize contains SKU + Rack only.
+The UI must retain the Qube Back End Stock Take visual structure.
 
-It is a checklist, not a quantity source.
+Table columns:
 
-Duplicate SKU + Rack rows mean the same checklist entry and are deduplicated.
+`#No. | Sku Code | Description | Qty Physical | Qty System | Variance`
 
-## 8. Working form
+Mapping:
 
-Opening a rack creates/refreshes missing System DB lines for that rack.
+- `#No.` = generated sequential number;
+- `Sku Code` = SKU;
+- `Description` = System DB description;
+- `Qty Physical` = manual operator entry, starts blank;
+- `Qty System` = exact SKU+Rack lookup from today's System DB;
+- `Variance` = Qty Physical - Qty System.
 
-Existing Physical Qty must never be overwritten by form generation or re-upload.
+Rack Number is shown in the Qube-style header as **Remarks/current rack context**.
 
-System-only lines remain visible so the expected inventory is not silently lost.
+No Barcode column is shown.
 
-## 9. UI — Qube fidelity
+## 8. Physical Qty
 
-The Qube Stock Take screen supplied by the business owner is the required UI reference.
+Physical Qty is never derived from Itemize row counts.
 
-The visual structure is preserved.
+It is entered manually.
 
-Required substitutions:
+Blank Physical Qty means not yet counted.
 
-| Qube | MidNorth |
-|---|---|
-| #No. | No. |
-| Sku Code | SKU |
-| Description | Description |
-| Quantity | Qty Physical |
-| UOM | Qty System |
-| Barcode | Variance |
-| ShortDesc | removed |
+A recount replaces the current Physical Qty and records the old/new values in `PHYSICAL_COUNT_HISTORY`.
 
-`Rack Number` is shown in the header `Remarks` field.
-
-## 10. Physical Qty
-
-Physical Qty is manually entered one line at a time.
-
-Initial value is blank.
-
-Blank is not zero.
-
-Allowed:
-- zero;
-- positive numeric values.
-
-Negative or non-numeric values are rejected.
-
-A recount replaces the previous value.
-
-Every replacement is audited.
-
-## 11. Variance
-
-```text
-Variance = Physical Qty - System Qty
-```
+## 9. Variance
 
 If Physical Qty is blank, Variance is blank.
 
-Variance is not independently entered.
+If both Physical Qty and exact System Qty exist:
 
-## 12. Finalization
+`Variance = Physical Qty - System Qty`
 
-A session cannot be finalized if any line has blank Physical Qty.
+No variance is calculated for UNKNOWN SKU or WRONG RACK until the lookup issue is resolved.
 
-After finalization:
-- session status becomes `FINALIZED`;
-- finalized timestamp is recorded;
-- final summary is stored;
-- normal Physical Qty editing is blocked.
+## 10. Finalization
 
-## 13. Historical data
+Finalization is blocked when:
 
-Do not overwrite:
-- System DB snapshots;
-- Physical Count history;
-- finalized result summaries.
+- any displayed Itemize line has blank Physical Qty; or
+- any displayed line remains `UNKNOWN SKU` or `WRONG RACK`.
 
-## 14. Audit
+This prevents an unresolved lookup line from being treated as System Qty = 0.
 
-At minimum retain:
-- upload ID;
-- snapshot ID;
-- upload timestamp;
-- source line;
-- raw invalid line;
-- parser reason;
-- previous Physical Qty;
-- new Physical Qty;
-- change timestamp;
-- user name where available;
-- final result.
+## 11. Store isolation
 
-## 15. Security
+Every operation must resolve the store through MASTER `STORES` and use that store's spreadsheet.
 
-Frontend filtering is not sufficient.
+A session from Store A must never read or write Store B data.
 
-Every Apps Script data operation must validate:
-1. store exists and is active;
-2. session exists;
-3. session belongs to requested store;
-4. session is editable before mutation.
+## 12. No Supabase/PostgreSQL
 
-For internal deployment, restrict Web App access to the intended organization. The store selector is an operational store selector, not a password-based authentication mechanism.
+Supabase/PostgreSQL is legacy/reference only.
 
-## 16. Accuracy
+It is not part of the active runtime.
 
-Current implementation:
 
-```text
-Total System Qty = 0 → Accuracy = 100%
+## Daily checking date
 
-otherwise:
-Accuracy =
-((Total System Qty - Total Absolute Variance) / Total System Qty) × 100
-```
+Each displayed SKU+Rack line receives `checked_at` when the team successfully enters Physical Qty for the first time.
 
-The formula should be confirmed by the business owner before production reporting is treated as official.
+This field answers the operational question: **how many SKU were checked by the team on a given day?**
+
+Rules:
+- System DB upload does not set `checked_at`.
+- Itemize upload does not set `checked_at`.
+- Opening a rack does not set `checked_at`.
+- A valid Physical Qty entry sets `checked_at` if it has not been recorded yet.
+- Editing the Physical Qty later does not change the original `checked_at`.
+- Daily productivity is counted from `checked_at`, not from `updated_at`.
+- `getDailyCheckingSummary()` provides per-day counts for a session.

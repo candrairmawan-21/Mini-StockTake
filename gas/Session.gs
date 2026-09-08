@@ -3,7 +3,7 @@ function getActiveStores() {
   const sh=master.getSheetByName(CONFIG.SHEETS.STORES);
   if(!sh||sh.getLastRow()<2) return [];
   return sh.getRange(2,1,sh.getLastRow()-1,4).getValues()
-    .filter(r=>norm_(r[0])&&norm_(r[1])&&String(r[3]).toUpperCase()!=='FALSE')
+    .filter(r=>norm_(r[0])&&norm_(r[1])&&norm_(r[2])&&String(r[3]).toUpperCase()!=='FALSE')
     .map(r=>({storeCode:norm_(r[0]),storeName:norm_(r[1])}));
 }
 
@@ -90,4 +90,28 @@ function lockSessionSnapshot_(sh,rowNumber,snapshotId) {
   const current=norm_(cell.getValue());
   if(current && current!==snapshotId) throw new Error('SYSTEM_SNAPSHOT_ALREADY_LOCKED');
   if(!current) cell.setValue(snapshotId);
+}
+
+
+
+
+/** Regression test: a finalized session must reject activity updates. */
+function testTouchFinalizedSession() {
+  const stores=getActiveStores();
+  if(!stores.length) throw new Error('NO_ACTIVE_STORES');
+  const storeCode=stores[0].storeCode;
+  const session=createSession(storeCode);
+  const store=getStoreContext_(storeCode);
+  const ss=SpreadsheetApp.openById(store.spreadsheetId);
+  const sh=ss.getSheetByName(CONFIG.STORE_SHEETS.SESSIONS);
+  const m=getHeaderMap_(sh);
+  const row=findRowByValue_(sh,m.session_id,session.sessionId);
+  sh.getRange(row,m.status).setValue(CONFIG.SESSION_STATUS.FINALIZED);
+  try {
+    touchSession(storeCode,session.sessionId,'TEST-RACK');
+    throw new Error('EXPECTED_SESSION_NOT_IN_PROGRESS');
+  } catch(e) {
+    if(String(e.message||e)!=='SESSION_NOT_IN_PROGRESS') throw e;
+    return {ok:true,storeCode,sessionId:session.sessionId,error:e.message};
+  }
 }
